@@ -98,76 +98,75 @@ export function ChatRoom({ activityId, hostId, me, initialMessages, state }: Pro
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ol
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
-        aria-label="Messages"
-        aria-live="polite"
-      >
-        {messages.length === 0 ? (
-          <li className="m-auto max-w-xs text-center text-sm text-muted-foreground">
-            No messages yet. Say hi and sort out the details!
-          </li>
-        ) : null}
-        {messages.map((m, i) => {
-          const mine = m.sender.id === me.id;
-          const date = new Date(m.createdAt);
-          const prev = messages[i - 1];
-          const newDay = !prev || formatDay(new Date(prev.createdAt)) !== formatDay(date);
-          const sameSender = prev && !newDay && prev.sender.id === m.sender.id;
-          return (
-            <li key={m.id} className="flex flex-col gap-3">
-              {newDay ? (
-                <span className="self-center rounded-full bg-muted px-3 py-1 text-xs font-bold text-muted-foreground">
-                  {formatDay(date)}
-                </span>
-              ) : null}
-              <div className={cn("flex max-w-[85%] items-end gap-2", mine && "self-end")}>
-                {!mine ? (
-                  <Avatar className={cn("size-8", sameSender && "invisible")}>
-                    {m.sender.image ? <AvatarImage src={m.sender.image} alt="" /> : null}
-                    <AvatarFallback className="bg-secondary text-[11px] font-extrabold">
-                      {initials(m.sender.name)}
-                    </AvatarFallback>
-                  </Avatar>
+      {/* Scrolling lives on a wrapper so the list only contains <li> items (valid HTML / a11y). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+        <ol className="flex flex-1 flex-col gap-3" aria-label="Messages" aria-live="polite">
+          {messages.length === 0 ? (
+            <li className="m-auto max-w-xs text-center text-sm text-muted-foreground">
+              No messages yet. Say hi and sort out the details!
+            </li>
+          ) : null}
+          {messages.map((m, i) => {
+            const mine = m.sender.id === me.id;
+            const date = new Date(m.createdAt);
+            const prev = messages[i - 1];
+            const newDay = !prev || formatDay(new Date(prev.createdAt)) !== formatDay(date);
+            const sameSender = prev && !newDay && prev.sender.id === m.sender.id;
+            return (
+              <li key={m.id} className="flex flex-col gap-3">
+                {newDay ? (
+                  <span className="self-center rounded-full bg-muted px-3 py-1 text-xs font-bold text-muted-foreground">
+                    {formatDay(date)}
+                  </span>
                 ) : null}
-                <div className={cn("flex flex-col gap-1", mine && "items-end")}>
-                  {!mine && !sameSender ? (
-                    <span className="text-xs font-semibold text-muted-foreground">
-                      {m.sender.name.split(" ")[0]}
-                      {m.sender.id === hostId ? (
-                        <span className="text-brand-deep"> · Host</span>
+                <div className={cn("flex max-w-[85%] items-end gap-2", mine && "self-end")}>
+                  {!mine ? (
+                    <Avatar className={cn("size-8", sameSender && "invisible")}>
+                      {m.sender.image ? <AvatarImage src={m.sender.image} alt="" /> : null}
+                      <AvatarFallback className="bg-secondary text-[11px] font-extrabold">
+                        {initials(m.sender.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : null}
+                  <div className={cn("flex flex-col gap-1", mine && "items-end")}>
+                    {!mine && !sameSender ? (
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {m.sender.name.split(" ")[0]}
+                        {m.sender.id === hostId ? (
+                          <span className="text-brand-deep"> · Host</span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                    <p
+                      className={cn(
+                        "rounded-[18px] px-3.5 py-2.5 text-[15px] leading-snug break-words whitespace-pre-wrap",
+                        mine
+                          ? "rounded-br-md bg-primary font-medium text-primary-foreground"
+                          : "rounded-bl-md bg-muted text-foreground",
+                        m.pending && "opacity-60",
+                      )}
+                    >
+                      {m.body}
+                    </p>
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+                      {m.pending ? "Sending…" : formatTime(date)}
+                      {!mine && !m.pending ? (
+                        <ReportButton
+                          targetType="MESSAGE"
+                          targetId={m.id}
+                          what="this message"
+                          variant="icon"
+                        />
                       ) : null}
                     </span>
-                  ) : null}
-                  <p
-                    className={cn(
-                      "rounded-[18px] px-3.5 py-2.5 text-[15px] leading-snug break-words whitespace-pre-wrap",
-                      mine
-                        ? "rounded-br-md bg-primary font-medium text-primary-foreground"
-                        : "rounded-bl-md bg-muted text-foreground",
-                      m.pending && "opacity-60",
-                    )}
-                  >
-                    {m.body}
-                  </p>
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
-                    {m.pending ? "Sending…" : formatTime(date)}
-                    {!mine && !m.pending ? (
-                      <ReportButton
-                        targetType="MESSAGE"
-                        targetId={m.id}
-                        what="this message"
-                        variant="icon"
-                      />
-                    ) : null}
-                  </span>
+                  </div>
                 </div>
-              </div>
-            </li>
-          );
-        })}
-        <div ref={bottomRef} />
-      </ol>
+              </li>
+            );
+          })}
+        </ol>
+        <div ref={bottomRef} aria-hidden="true" />
+      </div>
 
       {open ? (
         <div className="flex flex-col gap-2 border-t bg-background px-3 pt-2.5 pb-3">

@@ -50,3 +50,8 @@ next-env.d.ts
 
 # local uploads (M3 dev storage)
 /.data/
+
+# Playwright
+/tests/e2e/.state/
+/tests/e2e/.report/
+/tests/e2e/.results/
