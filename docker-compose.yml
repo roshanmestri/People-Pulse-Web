@@ -1,0 +1,27 @@
+# Local Postgres + PostGIS for development.
+# Start: docker compose up -d   ·   Stop: docker compose down   ·   Wipe data: docker compose down -v
+services:
+  db:
+    # Multi-arch build of the official postgis image (runs natively on Apple Silicon).
+    image: imresamu/postgis:17-3.5
+    container_name: gathr-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gathr
+      POSTGRES_PASSWORD: gathr
+      POSTGRES_DB: gathr
+    ports:
+      - "5432:5432"
+    volumes:
+      - gathr_pgdata:/var/lib/postgresql/data
+      # Replace the image's init scripts (which pre-install 4 extensions) with an empty folder,
+      # so Prisma migrations are the only thing that creates extensions.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gathr -d gathr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  gathr_pgdata:

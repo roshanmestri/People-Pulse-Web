@@ -1,0 +1,15 @@
+// Prisma schema: generator (builds the TS client), datasource (which DB), models (tables).
+// The connection URL lives in prisma7.config.ts, not here (Prisma 7).
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+// Models arrive in M1.
