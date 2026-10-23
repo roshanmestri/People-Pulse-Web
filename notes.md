@@ -352,14 +352,83 @@ Two installs failed with `ERESOLVE` because of _optional_ peer dependencies deep
 
 Lint, types, format, production build; HTTP checks (proxy redirect, magic link → new user → `/onboarding`); and a scripted real-Chrome run: sign in → onboarding (interests, languages, live area search) → save → `/me` → public profile (no email leaked) → invalid username rejected → sign out → seed user on mobile with verified badge.
 
+## 12. M3 — hosting a plan
+
+### Routes
+
+| Route                   | What                   | Rendering                                                           |
+| ----------------------- | ---------------------- | ------------------------------------------------------------------- |
+| `/activities/new`       | Host form              | Protected (proxy + `requireSessionUser`)                            |
+| `/activities/[id]`      | Detail page            | Public, server-rendered, SEO metadata + link-preview image          |
+| `/activities/[id]/edit` | Edit + cancel          | Host only — anyone else gets a 404 (doesn't reveal the plan exists) |
+| `/uploads/[...path]`    | Serves uploaded images | Route Handler                                                       |
+
+### Feature folder `src/features/activity/`
+
+`schemas.ts` (Zod, shared by form + server) · `actions.ts` (create / update / cancel Server Actions) · `queries.ts` (cached reads) · `components/` (form, venue picker, cancel button). Same shape as `features/profile`.
+
+### Rules enforced on the server (BRD FR-3)
+
+- Must start ≥15 min in the future; min people ≤ spots; price 0–₹10,000 whole rupees; ≤5 tags (lower-cased).
+- Only the host can edit/cancel. Spots can't drop below the number already approved.
+- Status: Publish → `OPEN`, Save draft → `DRAFT` (only the host can see drafts). Editing keeps `OPEN`/`FULL` in sync with approved count. Ongoing/completed/cancelled plans are locked.
+- Changing **time or venue** writes `ACTIVITY_UPDATED` notifications for approved members (only if something actually changed). **Cancel** writes `ACTIVITY_CANCELLED` for approved + pending people. The bell UI that shows them is M6.
+
+### Time zones
+
+Forms speak **IST**, the DB stores **UTC** — `src/lib/time.ts` (`istToUtc`, `utcToIstParts`, formatters with `timeZone: "Asia/Kolkata"`). Display always formats in IST, so a server in another country still shows the right time.
+
+### Venue privacy (`src/lib/geo.ts`)
+
+- `canSeeExactVenue()`: host ✔, approved member ✔, everyone else only if the host chose "show exact venue".
+- Others get `approximate()` coordinates (rounded to 2 decimals ≈ 1 km) and an 800 m circle, never the venue name.
+- The decision happens **on the server**: the cached query holds exact coordinates, but the page passes only the allowed ones to the client map. Verified in the browser: a signed-out visitor's HTML contains no exact coordinates or venue name. Link previews (Open Graph) use the area name only.
+
+### Maps — Leaflet + OpenStreetMap
+
+- `src/components/map/pin-map.tsx` is a Client Component (Leaflet needs `window`). `lazy-pin-map.tsx` loads it with **`next/dynamic(..., { ssr: false })`** — the "client-only island": the page is server-rendered, only the map runs in the browser.
+- Custom SVG pin via `L.divIcon` (Leaflet's default PNG markers break with bundlers).
+- The map wrapper uses Tailwind `isolate` (a new CSS stacking context) so Leaflet's z-indexes (400–1000) can't paint over the sticky header.
+- Venue search / reverse lookup reuse the Nominatim Server Actions, now shared in `src/features/geo/actions.ts`. Dragging or tapping the pin re-names the locality.
+
+### Image uploads
+
+- A Server Action can take a **`FormData`** containing a `File` — no separate upload API. The host form sends `data` (JSON of the fields) + `cover`; `/me` sends `photo`.
+- `src/lib/images.ts` (`sharp`): only JPG/PNG/WebP under 5 MB, auto-rotate, resize (covers 1600 px wide; avatars 512 px square crop), re-encode to WebP — which also **strips EXIF metadata** like the GPS location a phone photo was taken at.
+- `src/lib/storage.ts`: saves to `.data/uploads/` (gitignored) with random UUID names, served by the `/uploads/[...path]` Route Handler with long cache headers. The file-name check blocks path tricks like `../../.env`. **At deploy (M9) we swap this one file for a cloud store** (Vercel has no permanent disk).
+- No cover → the category photo is used. Profile photo upload on `/me` (tap the avatar) completes the verified-badge checklist.
+
+### Cache Components lessons from M3
+
+- **Reading the clock** (`new Date()`, `Date.now()`) during prerender is flagged as an "unstable value". Fix used: `await connection()` at the top of `getSessionUser()` marks it as request-time work before Better Auth checks session expiry.
+- The **React Compiler lint rule** `react-hooks/purity` also blocks `Date.now()` directly in a component body → moved into a helper (`tomorrowInIst()`).
+- `updateTag("activity:<id>")` after create/update/cancel so the cached detail page shows changes immediately.
+
+### next/image in Next 16
+
+`priority` is **deprecated**. For the main above-the-fold image use `loading="eager"` + `fetchPriority="high"`; plain `loading="eager"` for other visible-on-load images (first row of category tiles, the form preview).
+
+### Zod gotcha
+
+`z.nullable().refine((v) => v !== null)` — an arrow function that returns `v !== null` is a **type guard**, and Zod 4 narrows the output type with it. The form's input type (venue can be null) then differs from the output type and React Hook Form's resolver types clash. Use `refine((v) => Boolean(v), …)` to validate without narrowing.
+
+### Tests — Vitest
+
+- `npm test` (once) / `npm run test:watch`. Config: `vitest.config.mts` (`.mts` = ES module config; `@/` alias).
+- 31 unit tests for pure logic: IST↔UTC, coordinate rounding + who sees the venue, activity schema rules (past dates, min ≤ max, price, tags), verified-badge rules. Tests sit next to the code: `geo.ts` ↔ `geo.test.ts`.
+
+### How M3 was verified
+
+Lint, types, format, unit tests, production build, and a scripted real-Chrome run: empty form shows errors → host creates a plan (venue search, tap-to-move pin, ₹100, tag, cover upload) → published as `OPEN` with correct DB values → signed-out mobile view shows only the approximate area (no exact coordinates or venue name in the HTML) → stranger can't open `/edit` → editing a seed plan's time notified its 4 members → cancel → new user's photo upload turns on the verified badge.
+
 ---
 
-## 12. Progress log
+## 13. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
 - [x] M2 Auth & profile (2026-10-23)
-- [ ] M3 Create activity
+- [x] M3 Create activity (2026-10-23)
 - [ ] M4 Discover
 - [ ] M5 Join flow
 - [ ] M6 Chat & notifications

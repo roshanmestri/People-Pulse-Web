@@ -4,14 +4,13 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { VerifiedBadge } from "@/components/brand/verified-badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AccountActions } from "@/features/profile/components/account-actions";
+import { AvatarUpload } from "@/features/profile/components/avatar-upload";
 import { ProfileForm } from "@/features/profile/components/profile-form";
 import { toFormDefaults } from "@/features/profile/form-defaults";
 import { getCategories, getMyProfile } from "@/features/profile/queries";
 import { verificationChecklist } from "@/features/profile/verification";
 import { requireSessionUser } from "@/lib/session";
-import { initials } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Your profile" };
 
@@ -44,12 +43,7 @@ async function MeContent() {
   return (
     <>
       <header className="flex flex-wrap items-center gap-4">
-        <Avatar className="size-20">
-          {profile.image ? <AvatarImage src={profile.image} alt="" /> : null}
-          <AvatarFallback className="bg-primary text-2xl font-extrabold text-primary-foreground">
-            {initials(profile.name || profile.email)}
-          </AvatarFallback>
-        </Avatar>
+        <AvatarUpload name={profile.name || profile.email} image={profile.image} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="flex items-center gap-2 text-3xl font-extrabold tracking-[-0.04em]">
             {profile.name || "Your profile"}
@@ -105,12 +99,6 @@ async function MeContent() {
               </li>
             ))}
           </ul>
-          {!profile.image ? (
-            <p className="text-xs text-muted-foreground">
-              Photo upload arrives with image uploads in M3 — signing in with Google adds your photo
-              automatically.
-            </p>
-          ) : null}
         </section>
       )}
 

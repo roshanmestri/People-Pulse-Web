@@ -47,3 +47,6 @@ next-env.d.ts
 
 # prisma generated client (rebuilt by `prisma generate`)
 /src/generated/
+
+# local uploads (M3 dev storage)
+/.data/

@@ -15,7 +15,15 @@ export default function SignInPage({ searchParams }: PageProps<"/sign-in">) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-[#0a0a0c] lg:block">
-        <Image src="/images/run.jpg" alt="" fill priority sizes="50vw" className="object-cover" />
+        <Image
+          src="/images/run.jpg"
+          alt=""
+          fill
+          loading="eager"
+          fetchPriority="high"
+          sizes="50vw"
+          className="object-cover"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/40" />
         <div className="absolute inset-x-10 bottom-10 flex flex-col gap-3 text-white">
           <p className="text-5xl leading-none font-extrabold tracking-[-0.05em]">

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { headers } from "next/headers";
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
@@ -11,6 +12,9 @@ import { auth } from "@/lib/auth";
  * top of a layout.
  */
 export async function getSessionUser() {
+  // Mark this as request-time work before Better Auth reads the clock (session expiry);
+  // otherwise Next's prerender check flags `new Date()` as an unstable value.
+  await connection();
   const session = await auth.api.getSession({ headers: await headers() });
   return session?.user ?? null;
 }

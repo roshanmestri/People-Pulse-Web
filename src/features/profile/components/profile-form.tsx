@@ -59,7 +59,7 @@ export function ProfileForm({ categories, defaultValues, submitLabel, redirectTo
               role="group"
               aria-label="Interests"
             >
-              {categories.map((category) => {
+              {categories.map((category, index) => {
                 const selected = field.value.includes(category.id);
                 const photo = categoryPhoto(category.slug);
                 const toggle = () =>
@@ -82,7 +82,14 @@ export function ProfileForm({ categories, defaultValues, submitLabel, redirectTo
                   >
                     {photo ? (
                       <>
-                        <Image src={photo} alt="" fill sizes="200px" className="object-cover" />
+                        <Image
+                          src={photo}
+                          alt=""
+                          fill
+                          sizes="200px"
+                          className="object-cover"
+                          loading={index < 4 ? "eager" : "lazy"}
+                        />
                         <span className="absolute inset-0 bg-gradient-to-b from-transparent to-black/75" />
                       </>
                     ) : (

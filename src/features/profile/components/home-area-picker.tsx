@@ -3,7 +3,8 @@
 import { Crosshair, Lock, MapPin, Search } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 
-import { reverseHomeArea, searchHomeAreas } from "../actions";
+import { reversePlace, searchPlaces } from "@/features/geo/actions";
+
 import type { HomeArea } from "../schemas";
 
 type Props = { value: HomeArea | null; onChange: (value: HomeArea | null) => void };
@@ -18,7 +19,7 @@ export function HomeAreaPicker({ value, onChange }: Props) {
   useEffect(() => {
     if (query.trim().length < 3) return;
     const id = setTimeout(() => {
-      startTransition(async () => setResults(await searchHomeAreas(query)));
+      startTransition(async () => setResults(toAreas(await searchPlaces(query))));
     }, 600);
     return () => clearTimeout(id);
   }, [query]);
@@ -29,7 +30,12 @@ export function HomeAreaPicker({ value, onChange }: Props) {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) =>
         startTransition(async () => {
-          const area = await reverseHomeArea(coords.latitude, coords.longitude);
+          const place = await reversePlace(coords.latitude, coords.longitude);
+          const area = place && {
+            areaName: place.areaName,
+            latitude: place.latitude,
+            longitude: place.longitude,
+          };
           if (area) {
             onChange(area);
             setStatus(null);
@@ -113,4 +119,14 @@ export function HomeAreaPicker({ value, onChange }: Props) {
       </p>
     </div>
   );
+}
+
+/** Home areas are localities, so collapse venue-level search hits to unique area names. */
+function toAreas(places: Awaited<ReturnType<typeof searchPlaces>>): HomeArea[] {
+  const seen = new Set<string>();
+  return places.flatMap(({ areaName, latitude, longitude }) => {
+    if (seen.has(areaName)) return [];
+    seen.add(areaName);
+    return [{ areaName, latitude, longitude }];
+  });
 }

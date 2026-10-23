@@ -13,6 +13,8 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  // Makes relative Open Graph image URLs absolute (link previews in WhatsApp etc.).
+  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
   title: { default: "Gathr — Find your people, nearby", template: "%s · Gathr" },
   description:
     "Football at 9, a trek at sunrise, a jam on Saturday. Find people nearby for offline activities and join in two taps.",

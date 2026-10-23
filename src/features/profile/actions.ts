@@ -3,9 +3,11 @@
 import { updateTag } from "next/cache";
 
 import { db } from "@/lib/db";
+import { processImage } from "@/lib/images";
 import { getSessionUser } from "@/lib/session";
+import { deleteImage, saveImage } from "@/lib/storage";
 
-import { profileSchema, type ActionResult, type HomeArea, type ProfileInput } from "./schemas";
+import { profileSchema, type ActionResult, type ProfileInput } from "./schemas";
 import { nextVerifiedAt } from "./verification";
 
 /**
@@ -92,60 +94,47 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
   return { ok: true };
 }
 
-// ─── Home area lookup (OpenStreetMap Nominatim) ─────────────────────────────
-// Proxied through the server so we can send the required identifying User-Agent
-// and only signed-in users can use it. Nominatim's policy: max ~1 request/second.
+/** Profile photo upload (FormData with `photo`). Re-checks the verified badge afterwards. */
+export async function uploadAvatar(formData: FormData): Promise<ActionResult> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Please sign in again." };
+  const file = formData.get("photo");
+  if (!(file instanceof File) || file.size === 0)
+    return { ok: false, error: "Choose a photo first." };
 
-const NOMINATIM = "https://nominatim.openstreetmap.org";
-const NOMINATIM_HEADERS = {
-  "User-Agent": "Gathr/0.1 (community activities app; development)",
-  "Accept-Language": "en",
-};
+  const image = await processImage(file, 512, { square: true });
+  if (!image.ok) return { ok: false, error: image.error };
+  const url = await saveImage("avatars", image.data);
 
-type NominatimPlace = {
-  lat: string;
-  lon: string;
-  address?: Record<string, string | undefined>;
-};
+  const current = await db.user.findUniqueOrThrow({
+    where: { id: user.id },
+    select: {
+      image: true,
+      name: true,
+      bio: true,
+      username: true,
+      homeAreaName: true,
+      emailVerified: true,
+      verifiedAt: true,
+      verificationRevokedAt: true,
+      _count: { select: { interests: true } },
+    },
+  });
+  const verifiedAt = nextVerifiedAt(
+    {
+      emailVerified: current.emailVerified,
+      name: current.name,
+      image: url,
+      bio: current.bio,
+      homeAreaName: current.homeAreaName,
+      interestCount: current._count.interests,
+      verificationRevokedAt: current.verificationRevokedAt,
+    },
+    current.verifiedAt,
+  );
+  await db.user.update({ where: { id: user.id }, data: { image: url, verifiedAt } });
+  await deleteImage(current.image); // only removes files we stored (not Google photos)
 
-function toHomeArea(place: NominatimPlace): HomeArea | null {
-  const a = place.address ?? {};
-  const local = a.suburb ?? a.neighbourhood ?? a.city_district ?? a.quarter ?? a.village ?? a.town;
-  const city = a.city ?? a.town ?? a.state_district ?? a.county;
-  const areaName = [local, city]
-    .filter((part, i, all) => part && all.indexOf(part) === i)
-    .join(", ");
-  if (!areaName) return null;
-  return { areaName, latitude: Number(place.lat), longitude: Number(place.lon) };
-}
-
-export async function searchHomeAreas(query: string): Promise<HomeArea[]> {
-  if (!(await getSessionUser())) return [];
-  const q = query.trim().slice(0, 100);
-  if (q.length < 3) return [];
-  const url = `${NOMINATIM}/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=in&q=${encodeURIComponent(q)}`;
-  const res = await fetch(url, { headers: NOMINATIM_HEADERS });
-  if (!res.ok) return [];
-  const places = (await res.json()) as NominatimPlace[];
-  const seen = new Set<string>();
-  return places
-    .map(toHomeArea)
-    .filter(
-      (area): area is HomeArea =>
-        area !== null && !seen.has(area.areaName) && Boolean(seen.add(area.areaName)),
-    );
-}
-
-export async function reverseHomeArea(
-  latitude: number,
-  longitude: number,
-): Promise<HomeArea | null> {
-  if (!(await getSessionUser())) return null;
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  const url = `${NOMINATIM}/reverse?format=jsonv2&addressdetails=1&zoom=14&lat=${latitude}&lon=${longitude}`;
-  const res = await fetch(url, { headers: NOMINATIM_HEADERS });
-  if (!res.ok) return null;
-  const area = toHomeArea((await res.json()) as NominatimPlace);
-  // Store the user's real coordinates (private), but show only the area name.
-  return area ? { ...area, latitude, longitude } : null;
+  if (current.username) updateTag(`user:${current.username}`);
+  return { ok: true };
 }

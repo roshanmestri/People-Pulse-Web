@@ -49,7 +49,8 @@ export default function LandingPage() {
           src="/images/hero-football.jpg"
           alt=""
           fill
-          priority
+          loading="eager"
+          fetchPriority="high"
           sizes="100vw"
           className="-z-10 object-cover object-[60%_50%]"
         />
