@@ -10,7 +10,7 @@ Frontend engineer, 4 years React/TypeScript, **new to Next.js and backend**. I'm
 
 ## Stack
 
-Next.js (App Router, latest stable) · TypeScript strict · Tailwind CSS + shadcn/ui · PostgreSQL + PostGIS (Docker) · Prisma · Auth.js · Zod · React Hook Form · TanStack Query (only where needed) · react-leaflet · Vitest · Playwright.
+Next.js (App Router, latest stable) · TypeScript strict · Tailwind CSS + shadcn/ui · PostgreSQL + PostGIS (Docker) · Prisma · Better Auth · Zod · React Hook Form · TanStack Query (only where needed) · react-leaflet · Vitest · Playwright.
 
 ## How to work with me
 
@@ -22,7 +22,7 @@ Next.js (App Router, latest stable) · TypeScript strict · Tailwind CSS + shadc
 6. Feature-based folders: `src/features/<feature>/{actions,queries,schemas,components}`.
 7. After adding any library, config file or new concept, **update `notes.md`** with a short plain-language "what / why / config" entry, and tick the progress log.
 8. Use conventional commit messages. Suggest the commit after each milestone.
-9. Design: minimal, professional — off-white background, one accent colour, generous whitespace, clean typography (Inter or Geist), light + dark mode.
+9. Design: follow BRD §14 ("v2 — photo-led, sporty"): real photos, white UI, near-black ink, one orange accent `#FF5B22`, Plus Jakarta Sans, light + dark mode. Prototypes: https://claude.ai/artifact/P3Depp7cK2ttJmCyhRzxa6
 
 ## Commands
 

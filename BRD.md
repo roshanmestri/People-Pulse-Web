@@ -67,11 +67,14 @@ Categories are stored in the database (not hard-coded) so admins can add new one
 7. Group chat per activity (accepted members only)
 8. In-app notifications
 9. Report & block
+10. Price per person shown on activities (informational, no payments)
+11. Verified-host badge (basic: verified email + complete profile; admin can revoke)
 
 ### 4.2 Phase 2
 - Real-time chat via WebSockets, typing indicators, read receipts
 - Recurring activities (e.g. "every Sunday 7 AM")
-- Ratings / "attended" confirmation and trust score
+- Ratings / "attended" confirmation and trust score (see FR-9) — host star rating shown on cards and profiles
+- Stronger host verification: phone OTP, optional government-ID check
 - Email + web push notifications
 - Saved searches ("notify me when a badminton game is posted within 3 km")
 
@@ -93,7 +96,8 @@ Categories are stored in the database (not hard-coded) so admins can add new one
 - FR-2.1 Name, avatar, short bio, age range (optional), languages spoken.
 - FR-2.2 Select interests from categories (used for recommendations).
 - FR-2.3 Set a home area via search or "use my location". **Only the area (locality/city) is ever shown publicly**, never exact coordinates.
-- FR-2.4 Public profile page shows: name, avatar, bio, interests, activities hosted, member since.
+- FR-2.4 Public profile page shows: name, avatar, bio, interests, activities hosted, member since, verified badge (if any).
+- FR-2.5 **Verified host badge (MVP):** shown when the user has a verified email address and a complete profile (name, photo, bio, home area, ≥1 interest). It is recalculated when the profile changes; an admin can revoke it (e.g. after upheld reports) and the user then sees why. Phase 2 adds phone OTP and optional ID verification.
 
 ### FR-3 Create Activity (Host)
 Required fields:
@@ -106,7 +110,8 @@ Required fields:
 Optional fields:
 - Skill level (beginner / intermediate / pro / any)
 - Gender/age preference (optional, displayed, not enforced)
-- What to bring, cost split note (e.g. "court fee ₹100 each" — informational only)
+- What to bring
+- **Price per person** in ₹ (0 = free), plus an optional short price note (e.g. "court fee, split at venue", "pay as you eat"). Informational only — Gathr does not take payments (see §4.3).
 - Cover image
 - Tags
 
@@ -148,6 +153,11 @@ Rules:
 - FR-8.4 Basic content filtering on titles/descriptions (profanity list).
 - FR-8.5 Safety tips shown before joining activities with strangers.
 
+### FR-9 Ratings (Phase 2)
+- FR-9.1 After an activity is `COMPLETED`, the host marks who attended; attendees can then rate the host (1–5 stars, optional short comment) within 7 days.
+- FR-9.2 A host's rating is the average of their ratings; it is shown (★ 4.8 · 23 ratings) only once they have at least 3. Before that, cards show "New host" or "N hosted".
+- FR-9.3 One rating per attendee per activity; ratings can be reported like messages.
+
 ---
 
 ## 6. Non-Functional Requirements
@@ -174,7 +184,7 @@ Rules:
 | Backend | Next.js **Server Actions** + **Route Handlers** (TypeScript / Node.js runtime) | One codebase, typed end to end |
 | Database | **PostgreSQL** + **PostGIS** extension | Relational data + fast geo/radius queries |
 | ORM | **Prisma** (+ Prisma Studio as DB visualizer) | Typed queries, migrations |
-| Auth | **Auth.js (NextAuth)** or **Better Auth** | Sessions, OAuth, Prisma adapter |
+| Auth | **Better Auth** (chosen 2026-10-23) | Email + Google sign-in, DB sessions, Prisma adapter, built-in rate limiting |
 | Validation | **Zod** | Shared schemas for forms and server |
 | Forms | **React Hook Form** + Zod resolver | Performant forms |
 | Styling | **Tailwind CSS** + **shadcn/ui** | Minimal, accessible components you own |
@@ -193,14 +203,15 @@ Rules:
 ## 8. High-Level Data Model
 
 ```
-User (id, name, email, image, bio, homeLocation[geo], homeAreaName, role, createdAt)
+User (id, name, email, emailVerified, image, bio, homeLocation[geo], homeAreaName, role,
+      verifiedAt, verificationRevokedAt, createdAt)
 Interest (userId, categoryId)                      -- many-to-many
 Category (id, slug, name, icon, isActive)
 Activity (id, hostId, categoryId, title, description,
           startsAt, durationMinutes, minPeople, maxPeople,
           joinMode[REQUEST|OPEN], skillLevel, venueName,
           location[geo], areaName, showExactVenue, coverImage,
-          status, createdAt, updatedAt)
+          pricePerPerson, priceNote, status, createdAt, updatedAt)
 ActivityTag (activityId, tag)
 JoinRequest (id, activityId, userId, message, status, createdAt, decidedAt)
             -- unique (activityId, userId)
@@ -208,7 +219,9 @@ Message (id, activityId, senderId, body, createdAt)
 Notification (id, userId, type, payload[json], readAt, createdAt)
 Report (id, reporterId, targetType, targetId, reason, status, createdAt)
 Block (blockerId, blockedId)
-Account / Session / VerificationToken              -- auth tables
+Rating (id, activityId, raterId, rateeId, score, comment, createdAt)   -- Phase 2
+       -- unique (activityId, raterId, rateeId)
+Account / Session / Verification                   -- Better Auth tables
 ```
 Indexes: GiST index on `Activity.location`, B-tree on `(status, startsAt)`, full-text (tsvector) on title + description.
 
@@ -262,14 +275,15 @@ gathr/
 |---|-----------|-----------|
 | M0 | Setup | Next.js + TS + Tailwind + shadcn + ESLint/Prettier; Docker Postgres+PostGIS running; Prisma connected |
 | M1 | Data layer | Prisma schema + migrations + seed data (categories, 50 fake activities around Pune/Sangli/Mumbai) |
-| M2 | Auth & profile | Sign in/out, profile edit, interests, home area |
-| M3 | Create activity | Form with validation, map pin picker, Server Action, detail page |
+| M2 | Auth & profile | App shell in the v2 design; sign in/out (Better Auth); profile edit, interests, home area; verified-host badge |
+| M3 | Create activity | Form with validation (incl. price per person), map pin picker, Server Action, detail page |
 | M4 | Discover | Radius query (PostGIS), filters in URL, search, pagination, map view |
 | M5 | Join flow | Request/approve/reject with transaction-safe capacity |
 | M6 | Chat & notifications | Group chat (polling), notification bell |
 | M7 | Safety | Report, block, admin dashboard |
 | M8 | Quality | Tests, accessibility pass, Lighthouse ≥ 90, error/loading states |
 | M9 | Deploy | Vercel + hosted Postgres, env vars, CI (GitHub Actions) |
+| P2 | Ratings & trust | Attendance marking, host ratings (FR-9), phone/ID verification |
 
 ---
 
@@ -290,3 +304,14 @@ What this project should demonstrate to a hiring panel:
 - Auth + role-based authorization
 - Clean feature-based architecture, typed end to end (Prisma → Zod → UI)
 - Performance & accessibility numbers documented in the README
+
+---
+
+## 14. Design Direction (locked 2026-10-23)
+**"v2 — photo-led, sporty"** — prototypes: https://claude.ai/artifact/P3Depp7cK2ttJmCyhRzxa6 (v2 rows).
+- Real photography leads: full-bleed photo heroes with a dark scrim, photo on every activity card, round photo category chips.
+- White UI, near-black ink `#0F0F10`, one energetic accent **orange `#FF5B22`** (with dark text on it), deep orange `#B23A0E` for small accent text; verified tick blue `#1D7BF2`.
+- Typeface: **Plus Jakarta Sans** (700–800 for headings, tight letter-spacing).
+- Cards answer at a glance: when, how far, spots left, price, who's going, who hosts.
+- Mobile-first: bottom tab bar with a central "+ Host" action, primary actions pinned to the bottom.
+- Light mode first; dark mode follows the same tokens.
