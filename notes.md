@@ -101,7 +101,7 @@ postgresql://USER:PASSWORD@HOST:PORT/DBNAME?schema=public
   - `npx prisma generate` → rebuilds the typed client
   - `npx prisma studio` → opens a browser UI to view/edit tables (the "visualizer")
   - `npx prisma db seed` → runs the seed script
-- **Geo columns:** Prisma doesn't fully understand PostGIS types, so we mark them `Unsupported("geography(Point,4326)")` and use `db.$queryRaw` for the radius query.
+- **Geo columns:** Prisma can't read/write PostGIS types, so they're `Unsupported("geography(Point, 4326)")`. We store plain `latitude`/`longitude` floats (Prisma writes those) and Postgres **generates** the geography column from them. Radius queries use `db.$queryRaw`. Details in §10.
 - **One client only:** create Prisma client once in `src/lib/db.ts` (reuse in dev to avoid "too many connections").
 
 ---
@@ -140,6 +140,12 @@ The backend is **TypeScript running on Node.js**, inside Next.js (Server Actions
 - **Hydration:** browser attaches React to server HTML so buttons work.
 - **Migration:** a versioned change to the DB structure.
 - **Seed:** fake starter data.
+- **Generated column:** a column Postgres computes from other columns on every insert/update (`GENERATED ALWAYS AS (...) STORED`). You can't write to it.
+- **SRID 4326:** the ID for normal GPS latitude/longitude (WGS 84).
+- **`geography` vs `geometry`:** `geography` measures in metres on the Earth's curve — what we want for "within 5 km".
+- **tsvector / tsquery:** Postgres full-text search. A `tsvector` is the processed word list of a document; a `tsquery` is the search; `@@` means "matches".
+- **Shadow database:** a throw-away DB `prisma migrate dev` creates to replay migrations and detect drift.
+- **Drift:** the real DB differs from what your migrations + schema say it should be.
 - **Env var:** a setting/secret outside the code.
 
 ## 9. M0 — what we set up and why
@@ -197,10 +203,82 @@ The backend is **TypeScript running on Node.js**, inside Next.js (Server Actions
 
 The home page shows "Database connected · PostGIS x.y" — proves browser → Next server → Prisma → Postgres. Remove when the real landing page arrives.
 
-## 10. Progress log
+## 10. M1 — data layer
+
+### The schema (`prisma/schema.prisma`)
+
+- **Models:** `User`, `Account`, `Session`, `VerificationToken` (Auth.js adapter shape, ready for M2) · `Category`, `Interest` · `Activity`, `ActivityTag` · `JoinRequest` · `Message`, `Notification` · `Report`, `Block`.
+- **Enums** = a fixed list of allowed values, enforced by the DB and typed in TS (`ActivityStatus`, `JoinRequestStatus`, `JoinMode`, `SkillLevel`, `NotificationType`, `Role`, `ReportTargetType`, `ReportStatus`).
+- **Relations:** `hostId` + `@relation(...)` = a foreign key. `onDelete: Cascade` means deleting a user deletes their activities/requests/messages (account deletion, FR-1.3). Categories use `Restrict` — you can't delete one that activities still use.
+- **`@@unique([activityId, userId])` on JoinRequest:** one request per person per activity, enforced by the DB, not just app code.
+- **Composite primary keys** (`@@id([...])`) for pure link tables: `Interest`, `ActivityTag`, `Block`.
+- **`minPeople`/`maxPeople` do not count the host.** "Spots left" = `maxPeople − approved requests`.
+- **Privacy by design:** exact `latitude`/`longitude` live in the table, but every activity/user also has a human `areaName`/`homeAreaName`. Public queries (M4) select the area name + rounded coordinates, never raw ones.
+- **`startsAt` is stored in UTC.** The seed plans times in IST (UTC+5:30) and converts; the UI will convert back.
+
+### PostGIS + full-text with generated columns
+
+Problem: Prisma can't write `geography`/`tsvector`, and a model with a _required_ `Unsupported` field loses `db.x.create()`.
+Solution: let Postgres compute them.
+
+```sql
+"location" geography(Point, 4326) GENERATED ALWAYS AS (
+  ST_SetSRID(ST_MakePoint("longitude", "latitude"), 4326)::geography   -- note: (lng, lat)!
+) STORED
+"searchVector" tsvector GENERATED ALWAYS AS (
+  setweight(to_tsvector('english', title), 'A') || setweight(to_tsvector('english', description), 'B')
+) STORED
+```
+
+- App code does a normal `db.activity.create({ data: { latitude, longitude, title, ... } })` and Postgres fills `location` and `searchVector`.
+- Prisma only generates plain columns, so we created the migration with `prisma migrate dev --create-only`, **hand-edited the SQL**, then applied it.
+- To stop Prisma reporting drift, the schema repeats each expression as `@default(dbgenerated("..."))` — copied exactly from `npx prisma db pull --print` (Postgres rewrites expressions into its own canonical form).
+- **Indexes:** `@@index([location], type: Gist)` (spatial, for `ST_DWithin` radius search) and `@@index([searchVector], type: Gin)` (full-text). Plus B-trees on `(status, startsAt)`, `hostId`, `categoryId`, etc.
+
+Example queries (we'll wrap these in typed functions in M4):
+
+```sql
+-- open activities within 5 km of Pune centre, nearest first (uses the GiST index)
+SELECT title, ST_Distance(location, ST_MakePoint(73.8567, 18.5204)::geography) / 1000 AS km
+FROM "Activity"
+WHERE status = 'OPEN' AND ST_DWithin(location, ST_MakePoint(73.8567, 18.5204)::geography, 5000)
+ORDER BY km;
+
+-- full-text search (uses the GIN index); websearch_to_tsquery understands "quotes" and -minus
+SELECT title FROM "Activity" WHERE "searchVector" @@ websearch_to_tsquery('english', 'clean-up');
+```
+
+### Migrations workflow
+
+1. Edit `schema.prisma`.
+2. `npx prisma migrate dev --name what_changed` → writes `prisma/migrations/<timestamp>_what_changed/migration.sql` and applies it. (Add `--create-only` to edit the SQL first.)
+3. `npm run db:generate` → refresh the TS client (Prisma 7 no longer does this automatically).
+4. Commit the migration folder. **Never edit a migration that's already applied/shared** — make a new one.
+
+- `npx prisma migrate status` → are all migrations applied?
+- `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma` → "No difference detected" means no drift.
+- `npx prisma migrate reset` wipes the dev DB and replays everything + seed. Prisma refuses to let an AI agent run it without your explicit OK.
+
+### Seed (`prisma/seed.ts`)
+
+- Run: `npm run db:seed` (= `prisma db seed`, which runs `tsx prisma/seed.ts` as set in `prisma7.config.ts`). `tsx` runs TypeScript files directly in Node.
+- **What it creates:** 18 categories (upsert by slug), 22 users (8 Pune, 8 Mumbai, 6 Sangli) with interests and home areas, 50 activities (20 Pune, 20 Mumbai, 10 Sangli) on real locality coordinates ± ~650 m, plus ~245 join requests, ~210 chat messages and ~245 notifications.
+- **Status mix:** mostly `OPEN`, plus `FULL` (exactly `maxPeople` approved), `ONGOING` (started 30 min before the seed ran), `COMPLETED`, `CANCELLED`, `DRAFT`. Dates are relative to when you run the seed, so re-seed to get fresh upcoming activities. (Statuses are static data — automatic status updates come in M5.)
+- **Re-runnable:** seed users have `@seed.gathr.dev` emails; the script deletes them first and cascades take their data with them. Categories are upserted, so admin-added ones survive.
+- **Deterministic:** a tiny seeded random generator (`mulberry32`) instead of Faker → same data every run, no extra dependency.
+- **Own Prisma client:** the seed can't import `src/lib/db.ts` because of `import "server-only"` (it throws outside Next.js). Scripts create their own client with the same adapter.
+- **Seed login:** none yet. Users have no password/OAuth account until M2.
+
+### Look at the data
+
+`npm run db:studio` → Prisma Studio in the browser. (`Unsupported` columns like `location` don't show there; use `docker exec -it gathr-db psql -U gathr gathr`.)
+
+---
+
+## 11. Progress log
 
 - [x] M0 Setup (2026-10-23)
-- [ ] M1 Data layer
+- [x] M1 Data layer (2026-10-23)
 - [ ] M2 Auth & profile
 - [ ] M3 Create activity
 - [ ] M4 Discover
