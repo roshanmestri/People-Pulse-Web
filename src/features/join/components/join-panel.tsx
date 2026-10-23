@@ -71,6 +71,12 @@ export function JoinPanel({
         >
           <Pencil className="size-4" aria-hidden="true" /> Edit plan
         </Link>
+        <Link
+          href={`/activities/${activityId}/chat`}
+          className="flex h-11 items-center justify-center gap-2 rounded-2xl border text-sm font-bold"
+        >
+          <MessageCircle className="size-4" aria-hidden="true" /> Group chat
+        </Link>
       </div>
     );
   }
@@ -95,10 +101,12 @@ export function JoinPanel({
         >
           <CheckCircle2 className="size-5" aria-hidden="true" /> You&apos;re in!
         </p>
-        <p className="flex items-start gap-2 text-sm text-muted-foreground">
-          <MessageCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          The exact venue is shown above. The group chat opens in the next update (M6).
-        </p>
+        <Link
+          href={`/activities/${activityId}/chat`}
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-primary font-extrabold text-primary-foreground"
+        >
+          <MessageCircle className="size-4" aria-hidden="true" /> Open group chat
+        </Link>
         {phase === "OPEN" || phase === "FULL" ? (
           <Button
             variant="ghost"

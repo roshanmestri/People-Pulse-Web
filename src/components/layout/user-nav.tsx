@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { UserMenu } from "@/components/layout/user-menu";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import { ensureReminders, unreadCount } from "@/features/notifications/queries";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -23,17 +25,24 @@ export async function UserNav({ overlay }: { overlay: boolean }) {
     );
   }
 
-  const profile = await db.user.findUnique({
-    where: { id: sessionUser.id },
-    select: { name: true, username: true, image: true },
-  });
+  await ensureReminders(sessionUser.id); // FR-7.1 "starts in 2 hours" (created lazily)
+  const [profile, unread] = await Promise.all([
+    db.user.findUnique({
+      where: { id: sessionUser.id },
+      select: { name: true, username: true, image: true },
+    }),
+    unreadCount(sessionUser.id),
+  ]);
 
   return (
-    <UserMenu
-      name={profile?.name || sessionUser.email}
-      username={profile?.username ?? null}
-      image={profile?.image ?? null}
-    />
+    <div className="flex items-center gap-2">
+      <NotificationBell initialCount={unread} overlay={overlay} />
+      <UserMenu
+        name={profile?.name || sessionUser.email}
+        username={profile?.username ?? null}
+        image={profile?.image ?? null}
+      />
+    </div>
   );
 }
 

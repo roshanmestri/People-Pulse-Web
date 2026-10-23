@@ -533,9 +533,54 @@ Server Actions accept at most **1 MB** request bodies by default, so a normal ph
 
 `npm test` = fast pure tests (`*.test.ts`); `npm run test:db` = database tests (`*.db.test.ts`, separate config `vitest.db.config.mts`, Docker must be running).
 
+## 15. M6 — chat & notifications
+
+### Group chat (FR-6)
+
+- **Who:** host + approved members only (`getChatAccess`). Everyone else gets a 404 page / 403 from the API — checked on every request, never trusted from the client.
+- **Page:** `/activities/[id]/chat` — v2 chat design: plan header, pinned **exact venue** (members only), messages with avatars, day separators, "Host" label, quick replies, Enter to send / Shift+Enter for a new line.
+- **Sending:** `sendMessage` Server Action → session → membership → Zod (1–1000 chars) → open? → rate limit (20/min) → insert → notify the others.
+- **Read-only:** cancelled plans immediately; otherwise **7 days after the plan ends** (`chatState()` in `features/chat/rules.ts`, unit-tested).
+
+### Polling with TanStack Query (FR-6.3 Phase 1)
+
+In plain React you'd write `useEffect` + `setInterval` + `fetch` + loading/error state + cleanup. TanStack Query does that:
+
+```ts
+useQuery({
+  queryKey: ["chat", id],
+  queryFn: fetchMessages,
+  initialData: serverMessages,
+  refetchInterval: 4000,
+});
+```
+
+- `initialData` = the messages the **server already rendered**, so there's no loading flash.
+- It pauses while the tab is in the background and retries on errors.
+- The data comes from a **Route Handler** (`GET /api/activities/[id]/messages`) — a plain JSON endpoint, good for polling. (Server Actions are for _changing_ things; Route Handlers for things called by URL.)
+- **Optimistic send** with `useMutation`: `onMutate` adds a temporary "Sending…" bubble straight into the query cache, `onSuccess` swaps in the real message, `onError` rolls back and shows a toast.
+- `QueryProvider` (root layout) creates one `QueryClient` per browser tab via `useState`.
+- Phase 2 (BRD): replace polling with WebSockets for typing indicators/read receipts.
+
+### Notifications (FR-7)
+
+- Rows have been written since M3/M5 (requests, approvals, edits, cancellations); M6 adds **NEW_MESSAGE** and **REMINDER** and the UI.
+- `describeNotification(type, payload)` (pure, unit-tested) turns a row into a sentence + link (hosts → manage page, chat alerts → chat, others → the plan).
+- **Bell** in the header: server-rendered count, then TanStack Query re-checks `/api/notifications/unread` every 30 s and on window focus. `/notifications` lists them; tapping one marks it read and opens the link; **Mark all as read** (FR-7.2). Updates are always scoped to `userId` — you can only mark your own.
+- **Grouped chat alerts:** one unread "new messages" alert per chat per person (count + latest preview) instead of one per message. Opening the chat — or simply having it open, since polling counts as "looking" — marks it read.
+- **Reminders 2 h before start:** no background scheduler yet, so `ensureReminders()` creates them **lazily** when you load the app (header / bell poll), at most one per plan. M9 can move this to a scheduled job and add email/push.
+
+### Race condition found by the browser test: duplicate reminders
+
+The header bell and the notifications page both ran "is there a reminder? no → create one" at the same moment, so two identical reminders appeared 6 ms apart. Same family of bug as overbooking (M5), different fix: there's no single row to `FOR UPDATE`, so `ensureReminders` takes a **Postgres advisory lock** keyed on the user (`pg_advisory_xact_lock(hashtext('reminders:<userId>'))`) inside a transaction. Concurrent callers for the same user now queue up; the second one sees the reminder already exists. Re-tested by hammering the page with simultaneous loads → still exactly 1 reminder per plan.
+
+### Querying JSON columns in Prisma
+
+Notification `payload` is JSON. Filter inside it with `payload: { path: ["activityId"], equals: id }` (Postgres JSON path), e.g. "unread chat alerts for this plan".
+
 ---
 
-## 15. Progress log
+## 16. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
@@ -543,7 +588,7 @@ Server Actions accept at most **1 MB** request bodies by default, so a normal ph
 - [x] M3 Create activity (2026-10-23)
 - [x] M4 Discover (2026-10-23)
 - [x] M5 Join flow (2026-10-23)
-- [ ] M6 Chat & notifications
+- [x] M6 Chat & notifications (2026-10-23)
 - [ ] M7 Safety
 - [ ] M8 Quality
 - [ ] M9 Deploy

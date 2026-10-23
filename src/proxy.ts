@@ -18,8 +18,11 @@ export const config = {
     "/me/:path*",
     "/onboarding/:path*",
     "/plans/:path*",
+    "/chats/:path*",
+    "/notifications/:path*",
     "/activities/new",
     "/activities/:id/edit",
     "/activities/:id/manage",
+    "/activities/:id/chat",
   ],
 };
