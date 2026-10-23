@@ -61,15 +61,6 @@ export async function getActivity(id: string) {
 
 export type ActivityDetail = NonNullable<Awaited<ReturnType<typeof getActivity>>>;
 
-/** Not cached: depends on who is asking. */
-export async function isApprovedMember(activityId: string, userId: string) {
-  const row = await db.joinRequest.findUnique({
-    where: { activityId_userId: { activityId, userId } },
-    select: { status: true },
-  });
-  return row?.status === "APPROVED";
-}
-
 /** The host's own copy for the edit form (null if not found or not theirs). */
 export async function getActivityForEdit(id: string, userId: string) {
   const activity = await db.activity.findUnique({
@@ -80,4 +71,12 @@ export async function getActivityForEdit(id: string, userId: string) {
     },
   });
   return activity && activity.hostId === userId ? activity : null;
+}
+
+/** The viewer's own request for this plan (not cached — it's personal). */
+export async function getViewerRequest(activityId: string, userId: string) {
+  return db.joinRequest.findUnique({
+    where: { activityId_userId: { activityId, userId } },
+    select: { status: true },
+  });
 }

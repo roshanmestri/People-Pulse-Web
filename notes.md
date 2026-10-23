@@ -479,16 +479,70 @@ Filter pills are one horizontally swipeable row on phones (`overflow-x-auto`, `s
 
 Unit tests (filter parsing, URL round-trip, IST weekend windows incl. Sunday, cursor tamper-proofing) → counts for 9 filter combinations cross-checked against direct SQL → real-Chrome run: radius/category/search update the URL, Back works, clear filters, load more 12→14 with no duplicates, map pins + clusters, no exact coordinates, signed-in user centred on their home ("Near Baner, Pune"), edited plan appears in search immediately, mobile list + map.
 
+## 14. M5 — join flow
+
+### States (BRD FR-5.5)
+
+```
+(none) ──request──▶ PENDING ──approve──▶ APPROVED ──leave──▶ LEFT
+   ▲                  │ ├─decline─▶ REJECTED         └─remove─▶ REMOVED
+   │                  │ └─withdraw─▶ WITHDRAWN
+   └── may ask again after WITHDRAWN / LEFT (not after REJECTED / REMOVED)
+Open plans: (none) ──join──▶ APPROVED instantly (still capacity-checked)
+```
+
+The plan's own status follows automatically: **OPEN ↔ FULL** from the approved count; **ONGOING / COMPLETED** from the clock (`effectiveStatus()` in `src/lib/status.ts`) — nobody can join, leave or be approved once a plan has started.
+
+### Transactions + row lock = no overbooking (FR-5.4)
+
+`src/features/join/core.ts`. Every operation is one **interactive transaction** (`db.$transaction(async (tx) => { … })`) that starts with
+
+```sql
+SELECT … FROM "Activity" WHERE id = $1 FOR UPDATE
+```
+
+`FOR UPDATE` locks that one row until the transaction ends. If two people grab the last spot at the same instant, the second transaction **waits** for the first, then counts again, sees the plan is full and is refused.
+
+- Host approvals re-read the request _after_ taking the lock (another tab may have just decided it).
+- Proven by `src/features/join/core.db.test.ts` (`npm run test:db`, needs Docker): 10 people race for 3 spots → exactly 3 get in, both for instant-join and for 10 simultaneous host approvals. **With the `FOR UPDATE` removed, the same test lets all 10 in** — that's the bug the lock prevents.
+- `core.ts` has no `server-only` import so the test can call it directly; the Server Actions in `actions.ts` are thin wrappers (session → Zod → core → `updateTag`).
+
+### Other rules
+
+- Host can't join their own plan; people the host **blocked** can't request (FR-8.2, ready for M7).
+- **Rate limit:** max 10 join requests per user per hour (BRD §6).
+- Each change writes a `Notification` row (new request / joined, approved, declined, removed) — the bell UI comes in M6.
+- `updateTag("activity:<id>")` + `updateTag("activities")` after every change so the detail page and Explore's "spots left" are fresh.
+
+### UI
+
+- **Join card** (`JoinPanel`): signed out → "Sign in to join"; host → "Manage requests · N waiting" + Edit; join flow shows **safety tips** first (FR-8.5) and an optional message; then "Request sent · Withdraw", "You're in! · Leave", "Full", "declined", "started/over". After an action, `router.refresh()` re-renders the server page (spots, who's in, exact venue).
+- **Manage requests** (`/activities/[id]/manage`, host only): seat bar, waiting count, status; request cards with profile, verified tick, "joined N · hosted N", message, Approve/Decline (Approve disabled when full); Going list with Remove.
+- **My plans** (`/plans`): Hosting (with going/waiting counts → manage page), Going, Waiting for approval, Past.
+
+### Bug found while building: big photos → 500
+
+Server Actions accept at most **1 MB** request bodies by default, so a normal phone photo as a cover failed with `Body exceeded 1 MB limit` before our code ran. Fixes:
+
+- `next.config.ts` → `experimental.serverActions.bodySizeLimit: "6mb"` (5 MB image cap + form overhead).
+- `src/lib/image-rules.ts`: the same size/type check runs **in the browser** (instant message) and on the server.
+- Forms catch unexpected action failures and show a toast instead of failing silently.
+- Lesson: test uploads with **realistic** files — the M3 test used a 49 KB photo and missed it.
+
+### Vitest projects
+
+`npm test` = fast pure tests (`*.test.ts`); `npm run test:db` = database tests (`*.db.test.ts`, separate config `vitest.db.config.mts`, Docker must be running).
+
 ---
 
-## 14. Progress log
+## 15. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
 - [x] M2 Auth & profile (2026-10-23)
 - [x] M3 Create activity (2026-10-23)
 - [x] M4 Discover (2026-10-23)
-- [ ] M5 Join flow
+- [x] M5 Join flow (2026-10-23)
 - [ ] M6 Chat & notifications
 - [ ] M7 Safety
 - [ ] M8 Quality

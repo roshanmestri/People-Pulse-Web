@@ -1,4 +1,4 @@
-import { CalendarDays, Lock, MapPin, Pencil, Share2, ShoppingBag, Wallet } from "lucide-react";
+import { CalendarDays, Lock, MapPin, Share2, ShoppingBag, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,10 +8,13 @@ import { Suspense } from "react";
 import { VerifiedBadge } from "@/components/brand/verified-badge";
 import { LazyPinMap } from "@/components/map/lazy-pin-map";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getActivity, isApprovedMember, type ActivityDetail } from "@/features/activity/queries";
+import { getActivity, getViewerRequest, type ActivityDetail } from "@/features/activity/queries";
+import { JoinPanel, type ViewerState } from "@/features/join/components/join-panel";
+import { countPending } from "@/features/join/queries";
 import { categoryPhoto } from "@/lib/category-media";
 import { approximate, canSeeExactVenue } from "@/lib/geo";
 import { getSessionUser } from "@/lib/session";
+import { effectiveStatus } from "@/lib/status";
 import { formatDuration, formatLongDay, formatTime } from "@/lib/time";
 import { cn, initials } from "@/lib/utils";
 
@@ -65,7 +68,12 @@ async function ActivityContent({ params }: { params: PageProps<"/activities/[id]
   const isHost = viewer?.id === activity.hostId;
   if (activity.status === "DRAFT" && !isHost) notFound();
 
-  const approvedMember = viewer && !isHost ? await isApprovedMember(id, viewer.id) : false;
+  const request = viewer && !isHost ? await getViewerRequest(id, viewer.id) : null;
+  const approvedMember = request?.status === "APPROVED";
+  const viewerState: ViewerState = !viewer ? "anon" : isHost ? "host" : (request?.status ?? "none");
+  const pendingCount = isHost ? await countPending(id) : 0;
+  // Time-aware status (FR-3.4): "Happening now" / "over" come from the clock.
+  const phase = effectiveStatus(activity);
   const exact = canSeeExactVenue({
     viewerId: viewer?.id ?? null,
     hostId: activity.hostId,
@@ -94,16 +102,14 @@ async function ActivityContent({ params }: { params: PageProps<"/activities/[id]
           sizes="(min-width: 1152px) 1152px, 100vw"
           className="object-cover"
         />
-        {STATUS[activity.status] ? (
+        {STATUS[phase] ? (
           <span
             className={cn(
               "absolute top-4 left-4 rounded-full px-3.5 py-2 text-sm font-extrabold",
-              activity.status === "CANCELLED"
-                ? "bg-destructive text-white"
-                : "bg-white text-[#0f0f10]",
+              phase === "CANCELLED" ? "bg-destructive text-white" : "bg-white text-[#0f0f10]",
             )}
           >
-            {STATUS[activity.status]}
+            {STATUS[phase]}
           </span>
         ) : null}
       </div>
@@ -263,32 +269,15 @@ async function ActivityContent({ params }: { params: PageProps<"/activities/[id]
                 />
               ))}
             </div>
-            {isHost ? (
-              <>
-                <Link
-                  href={`/activities/${activity.id}/edit`}
-                  className="flex h-13 items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-base font-extrabold text-primary-foreground"
-                >
-                  <Pencil className="size-4" aria-hidden="true" /> Edit plan
-                </Link>
-                <p className="text-center text-xs text-muted-foreground">
-                  Managing requests arrives in M5.
-                </p>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  disabled
-                  className="h-13 rounded-2xl bg-primary py-3.5 text-base font-extrabold text-primary-foreground opacity-60"
-                >
-                  I&apos;m in — request spot
-                </button>
-                <p className="text-center text-xs text-muted-foreground">
-                  Joining opens in the next update (M5).
-                </p>
-              </>
-            )}
+            <JoinPanel
+              activityId={activity.id}
+              joinMode={activity.joinMode}
+              phase={phase}
+              viewer={viewerState}
+              spotsLeft={spotsLeft}
+              pendingCount={pendingCount}
+              hostFirstName={activity.host.name.split(" ")[0] ?? activity.host.name}
+            />
           </div>
 
           <Link

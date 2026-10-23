@@ -17,7 +17,8 @@
     "db:seed": "prisma db seed",
     "postinstall": "prisma generate",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:db": "vitest run --config vitest.db.config.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.2",
