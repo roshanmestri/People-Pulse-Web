@@ -106,6 +106,7 @@ export async function createActivity(
     select: { id: true },
   });
 
+  updateTag("activities"); // Explore results
   const username = await hostUsername(user.id);
   if (username) updateTag(`user:${username}`);
   return { ok: true, id: activity.id };
@@ -190,6 +191,7 @@ export async function updateActivity(
 
   if (coverImage !== existing.coverImage) await deleteImage(existing.coverImage);
   updateTag(`activity:${id}`);
+  updateTag("activities"); // Explore results
   const username = await hostUsername(user.id);
   if (username) updateTag(`user:${username}`);
   return { ok: true, id };
@@ -230,6 +232,7 @@ export async function cancelActivity(id: string): Promise<ActivityActionResult> 
   ]);
 
   updateTag(`activity:${id}`);
+  updateTag("activities"); // Explore results
   const username = await hostUsername(user.id);
   if (username) updateTag(`user:${username}`);
   return { ok: true, id };

@@ -100,7 +100,7 @@ export default function LandingPage() {
             {TILES.map((tile) => (
               <Link
                 key={tile.label}
-                href={`/explore?category=${tile.slug}`}
+                href={`/explore?cat=${tile.slug}`}
                 className={`group relative overflow-hidden rounded-[22px] bg-muted ${tile.span}`}
               >
                 <Image

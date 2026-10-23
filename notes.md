@@ -421,15 +421,73 @@ Forms speak **IST**, the DB stores **UTC** — `src/lib/time.ts` (`istToUtc`, `u
 
 Lint, types, format, unit tests, production build, and a scripted real-Chrome run: empty form shows errors → host creates a plan (venue search, tap-to-move pin, ₹100, tag, cover upload) → published as `OPEN` with correct DB values → signed-out mobile view shows only the approximate area (no exact coordinates or venue name in the HTML) → stranger can't open `/edit` → editing a seed plan's time notified its 4 members → cancel → new user's photo upload turns on the verified badge.
 
+## 13. M4 — Discover (Explore)
+
+### The URL is the state (BRD FR-4.6)
+
+`/explore?q=badminton&cat=sports-fitness&r=10&when=weekend&level=BEGINNER&open=1&city=mumbai&view=map`
+
+- In plain React you'd keep filters in `useState`/a store and fetch in `useEffect`. Here every control calls `router.push('/explore?…')`; the **Server Component page re-renders** with the new `searchParams`. Links are shareable, Back/Forward work, and the first paint already has results.
+- `src/features/discover/filters.ts` (pure, unit-tested): `parseFilters()` is lenient — junk like `?r=7&when=yesterday` silently falls back to defaults instead of erroring. `filtersToQuery()` writes the URL back, leaving out defaults and only ever writing **rounded** coordinates.
+- `useTransition()` around `router.push` gives a `pending` flag → the thin orange progress bar.
+- A list with its own `useState` must be **remounted** when the search changes: `<ResultsList key={query} …>` (otherwise it keeps the old pages).
+
+### Where "near" is (`resolveCenter`)
+
+explicit `lat/lng` ("use my location", rounded) → chosen `city` (Pune/Mumbai/Sangli) → your **home area** (rounded) → Pune. Rounding also keeps exact homes out of cache keys and URLs.
+
+### The PostGIS query (`src/features/discover/queries.ts`)
+
+```sql
+WHERE a.status IN ('OPEN','FULL') AND a."startsAt" >= :from [AND < :to]
+  AND ST_DWithin(a.location, :point, :radius_m)          -- GiST index, metres
+  [AND c.slug IN (…)] [AND skill IN (:level,'ANY')] [AND a.status='OPEN']
+  [AND (a."searchVector" @@ websearch_to_tsquery('english', :q) OR tag = ANY(:words))]
+ORDER BY ST_Distance(a.location, :point), a."startsAt", a.id
+```
+
+- Built with **`Prisma.sql` / `Prisma.join` / `Prisma.empty`** — tagged templates that keep every value a **parameter** (`$1`, `$2`…), so user input can't inject SQL even though it's raw SQL.
+- Enum columns compared to parameters need a cast (`a."skillLevel"::text IN (…)`).
+- Only `round(latitude, 2)` / `round(longitude, 2)` are selected — exact venues never leave the database on Explore. (Browser test checked the map page HTML for all 14 plans: none leaked.)
+- "Time windows" (`today`, `weekend`, `week`) are IST calendar days converted to UTC (`timeWindow()`).
+
+### Cursor pagination ("Load more")
+
+- Results are ordered by `(distance, startsAt, id)`. The cursor is the last row's values, base64-encoded; the next page is `WHERE (distance, startsAt, id) > (cursor)` — a **row comparison** in SQL. Unlike `OFFSET`, nothing shifts or duplicates when new plans appear.
+- First page is server-rendered; "Load more" calls the `loadMoreActivities` **Server Action**, which re-parses the filters (never trusts the client) and returns the next page to append.
+- Decoding is validated with Zod, so a tampered cursor just returns nothing.
+
+### Caching search results
+
+`searchActivities`, `countActivities` and `mapPins` use `"use cache"` + `cacheLife("minutes")` + `cacheTag("activities")`. Each filter combination is its own cache entry (the arguments are the key). The M3 create/update/cancel actions call `updateTag("activities")`, so a new or edited plan shows up immediately — the browser test edits a title and finds it in search right after.
+
+### The map
+
+- `leaflet.markercluster` groups nearby pins into numbered orange bubbles (FR-4.4); pins are round photos (CSS classes `.gathr-pin` / `.gathr-cluster` in `globals.css`). Clicking a pin shows a preview card linking to the plan.
+- **Gotcha:** the plugin is old-style and extends a _global_ `L`. With ES modules Leaflet isn't global → `ReferenceError: L is not defined`. Fix: `leaflet-global.ts` sets `globalThis.L` and is imported **before** the plugin (imports run in order).
+- Loaded with `next/dynamic({ ssr: false })` like the M3 map.
+
+### CSS gotcha found by the browser test
+
+The filter panel overlaps the photo header with a negative margin. The header is `position: relative`, the panel wasn't — and **positioned elements paint above non-positioned later siblings**, so the header silently swallowed clicks on the radius pills. Fix: give the panel `relative z-10`.
+
+### Mobile
+
+Filter pills are one horizontally swipeable row on phones (`overflow-x-auto`, `shrink-0`, `whitespace-nowrap`) and wrap on wider screens, so results/map are visible without scrolling. A floating **Map / List** button sits above the tab bar.
+
+### How M4 was verified
+
+Unit tests (filter parsing, URL round-trip, IST weekend windows incl. Sunday, cursor tamper-proofing) → counts for 9 filter combinations cross-checked against direct SQL → real-Chrome run: radius/category/search update the URL, Back works, clear filters, load more 12→14 with no duplicates, map pins + clusters, no exact coordinates, signed-in user centred on their home ("Near Baner, Pune"), edited plan appears in search immediately, mobile list + map.
+
 ---
 
-## 13. Progress log
+## 14. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
 - [x] M2 Auth & profile (2026-10-23)
 - [x] M3 Create activity (2026-10-23)
-- [ ] M4 Discover
+- [x] M4 Discover (2026-10-23)
 - [ ] M5 Join flow
 - [ ] M6 Chat & notifications
 - [ ] M7 Safety
