@@ -6,6 +6,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { checkImageFile } from "@/lib/image-rules";
 import { initials } from "@/lib/utils";
 
 import { uploadAvatar } from "../actions";
@@ -17,10 +18,14 @@ export function AvatarUpload({ name, image }: { name: string; image: string | nu
 
   function upload(file: File | undefined) {
     if (!file) return;
+    const problem = checkImageFile(file);
+    if (problem) return void toast.error(problem);
     const fd = new FormData();
     fd.set("photo", file);
     startTransition(async () => {
-      const result = await uploadAvatar(fd);
+      const result = await uploadAvatar(fd).catch(() => null);
+      if (!result)
+        return void toast.error("Couldn't upload — check your connection and try again.");
       if (!result.ok) return void toast.error(result.error);
       toast.success("Photo updated");
       router.refresh();

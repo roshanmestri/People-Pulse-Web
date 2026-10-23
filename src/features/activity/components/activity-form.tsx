@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { categoryPhoto } from "@/lib/category-media";
+import { checkImageFile } from "@/lib/image-rules";
 import type { LatLng } from "@/lib/geo";
 import { formatDay, formatDuration, formatTime, istToUtc } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -70,9 +71,16 @@ export function ActivityForm({ categories, defaultValues, fallbackCenter, host, 
       fd.set("data", JSON.stringify(data));
       if (cover) fd.set("cover", cover);
       if (coverRemoved) fd.set("removeCover", "true");
-      const result = existing
-        ? await updateActivity(existing.id, fd, intent)
-        : await createActivity(fd, intent);
+      let result: Awaited<ReturnType<typeof createActivity>>;
+      try {
+        result = existing
+          ? await updateActivity(existing.id, fd, intent)
+          : await createActivity(fd, intent);
+      } catch {
+        // Network drop or an unexpected server error — never leave the user with a silent failure.
+        toast.error("Couldn't save — check your connection and try again.");
+        return;
+      }
       if (!result.ok) {
         for (const [field, message] of Object.entries(result.fieldErrors ?? {})) {
           form.setError(field as keyof ActivityInput, { message });
@@ -442,7 +450,14 @@ export function ActivityForm({ categories, defaultValues, fallbackCenter, host, 
                   accept="image/jpeg,image/png,image/webp"
                   className="sr-only"
                   onChange={(e) => {
-                    setCover(e.target.files?.[0] ?? null);
+                    const file = e.target.files?.[0] ?? null;
+                    const problem = file && checkImageFile(file);
+                    if (problem) {
+                      toast.error(problem);
+                      e.target.value = "";
+                      return;
+                    }
+                    setCover(file);
                     setCoverRemoved(false);
                   }}
                 />

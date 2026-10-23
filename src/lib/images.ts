@@ -2,8 +2,7 @@ import "server-only";
 
 import sharp from "sharp";
 
-const MAX_BYTES = 5 * 1024 * 1024;
-const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
+import { checkImageFile } from "./image-rules";
 
 export type ImageResult = { ok: true; data: Buffer } | { ok: false; error: string };
 
@@ -16,8 +15,8 @@ export async function processImage(
   maxWidth: number,
   { square = false }: { square?: boolean } = {},
 ): Promise<ImageResult> {
-  if (!ACCEPTED.has(file.type)) return { ok: false, error: "Use a JPG, PNG or WebP image." };
-  if (file.size > MAX_BYTES) return { ok: false, error: "Images must be under 5 MB." };
+  const problem = checkImageFile(file);
+  if (problem) return { ok: false, error: problem };
   try {
     const data = await sharp(Buffer.from(await file.arrayBuffer()))
       .rotate() // respect the phone's orientation flag before metadata is dropped
