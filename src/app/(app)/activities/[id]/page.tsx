@@ -13,6 +13,8 @@ import { JoinPanel, type ViewerState } from "@/features/join/components/join-pan
 import { countPending } from "@/features/join/queries";
 import { categoryPhoto } from "@/lib/category-media";
 import { approximate, canSeeExactVenue } from "@/lib/geo";
+import { isAdmin, isBlockedEitherWay } from "@/features/safety/queries";
+import { ReportButton } from "@/features/safety/components/report-button";
 import { getSessionUser } from "@/lib/session";
 import { effectiveStatus } from "@/lib/status";
 import { formatDuration, formatLongDay, formatTime } from "@/lib/time";
@@ -67,6 +69,9 @@ async function ActivityContent({ params }: { params: PageProps<"/activities/[id]
 
   const isHost = viewer?.id === activity.hostId;
   if (activity.status === "DRAFT" && !isHost) notFound();
+  // Moderation (FR-8.3) and blocking (FR-8.2): the page simply doesn't exist for them.
+  if (activity.hiddenAt && !(await isAdmin(viewer?.id))) notFound();
+  if (viewer && !isHost && (await isBlockedEitherWay(viewer.id, activity.hostId))) notFound();
 
   const request = viewer && !isHost ? await getViewerRequest(id, viewer.id) : null;
   const approvedMember = request?.status === "APPROVED";
@@ -306,6 +311,9 @@ async function ActivityContent({ params }: { params: PageProps<"/activities/[id]
             <Share2 className="size-4" aria-hidden="true" /> Share this page&apos;s link — previews
             show the area, never the venue.
           </p>
+          {viewer && !isHost ? (
+            <ReportButton targetType="ACTIVITY" targetId={activity.id} what="this plan" />
+          ) : null}
         </aside>
       </div>
     </article>

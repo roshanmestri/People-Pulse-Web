@@ -17,6 +17,7 @@ import {
   toSearchArgs,
 } from "@/features/discover/queries";
 import { getCategories } from "@/features/profile/queries";
+import { hiddenUserIds } from "@/features/safety/queries";
 import { getSessionUser } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -66,7 +67,7 @@ async function ExploreResults({
   const user = await getSessionUser();
   const home = user ? await getHome(user.id) : null;
   const center = resolveCenter(filters, home);
-  const args = toSearchArgs(filters, center);
+  const args = toSearchArgs(filters, center, await hiddenUserIds(user?.id ?? null));
   const showMap = filters.view === "map";
 
   const [page, total, categories, pins] = await Promise.all([

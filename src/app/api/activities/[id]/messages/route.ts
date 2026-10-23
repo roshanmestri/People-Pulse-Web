@@ -1,4 +1,5 @@
 import { getChatAccess, listMessages } from "@/features/chat/queries";
+import { hiddenUserIds } from "@/features/safety/queries";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 
@@ -20,7 +21,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/activities/
     data: { readAt: new Date() },
   });
   return Response.json(
-    { messages: await listMessages(id) },
+    { messages: await listMessages(id, { hideSenderIds: await hiddenUserIds(user.id) }) },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

@@ -38,6 +38,7 @@ export async function getActivity(id: string) {
       latitude: true,
       longitude: true,
       showExactVenue: true,
+      hiddenAt: true,
       hostId: true,
       category: { select: { name: true, slug: true, icon: true } },
       tags: { select: { tag: true } },

@@ -5,6 +5,8 @@ import { Suspense } from "react";
 
 import { VerifiedBadge } from "@/components/brand/verified-badge";
 import { AccountActions } from "@/features/profile/components/account-actions";
+import { UnblockButton } from "@/features/safety/components/block-button";
+import { listBlocked } from "@/features/safety/queries";
 import { AvatarUpload } from "@/features/profile/components/avatar-upload";
 import { ProfileForm } from "@/features/profile/components/profile-form";
 import { toFormDefaults } from "@/features/profile/form-defaults";
@@ -107,7 +109,26 @@ async function MeContent() {
         defaultValues={toFormDefaults(profile)}
         submitLabel="Save profile"
       />
+      <BlockedPeople userId={user.id} />
       <AccountActions />
     </>
+  );
+}
+
+async function BlockedPeople({ userId }: { userId: string }) {
+  const blocked = await listBlocked(userId);
+  if (!blocked.length) return null;
+  return (
+    <section className="flex flex-col gap-3 rounded-3xl border bg-card p-5 sm:p-6">
+      <h2 className="text-lg font-extrabold tracking-[-0.02em]">Blocked people</h2>
+      <ul className="flex flex-col divide-y">
+        {blocked.map(({ blocked: person }) => (
+          <li key={person.id} className="flex items-center justify-between gap-3 py-2.5">
+            <span className="font-semibold">{person.name}</span>
+            <UnblockButton userId={person.id} name={person.name.split(" ")[0] ?? person.name} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

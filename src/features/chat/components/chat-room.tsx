@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDay, formatTime } from "@/lib/time";
 import { cn, initials } from "@/lib/utils";
+import { ReportButton } from "@/features/safety/components/report-button";
 
 import { markChatRead, sendMessage } from "../actions";
 import type { ChatMessage } from "../queries";
@@ -149,8 +150,16 @@ export function ChatRoom({ activityId, hostId, me, initialMessages, state }: Pro
                   >
                     {m.body}
                   </p>
-                  <span className="text-[11px] font-semibold text-muted-foreground">
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
                     {m.pending ? "Sending…" : formatTime(date)}
+                    {!mine && !m.pending ? (
+                      <ReportButton
+                        targetType="MESSAGE"
+                        targetId={m.id}
+                        what="this message"
+                        variant="icon"
+                      />
+                    ) : null}
                   </span>
                 </div>
               </div>

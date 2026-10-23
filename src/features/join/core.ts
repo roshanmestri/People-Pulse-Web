@@ -241,3 +241,41 @@ export async function removeMember(
     return { ok: true, activityId: a.id, status: JoinRequestStatus.REMOVED };
   });
 }
+
+// ─── Blocking (FR-8.2) ───────────────────────────────────────────────────
+
+/**
+ * Quietly take `userId` out of every upcoming plan hosted by `hostId` (pending or in).
+ * Each plan is changed under its row lock, so freed spots are counted correctly.
+ * Returns the ids of plans that changed.
+ */
+export async function evictFromHostPlans(
+  client: PrismaClient,
+  input: { hostId: string; userId: string; now?: Date },
+): Promise<string[]> {
+  const now = input.now ?? new Date();
+  const requests = await client.joinRequest.findMany({
+    where: {
+      userId: input.userId,
+      status: { in: ["PENDING", "APPROVED"] },
+      activity: { hostId: input.hostId },
+    },
+    select: { id: true, activityId: true },
+  });
+  const changed: string[] = [];
+  for (const r of requests) {
+    await client.$transaction(async (tx) => {
+      const a = await lockActivity(tx, r.activityId);
+      if (!a || !acceptsChanges(a, now)) return;
+      const req = await tx.joinRequest.findUnique({ where: { id: r.id } });
+      if (req?.status !== "PENDING" && req?.status !== "APPROVED") return;
+      await tx.joinRequest.update({
+        where: { id: r.id },
+        data: { status: JoinRequestStatus.REMOVED, decidedAt: now },
+      });
+      if (req.status === "APPROVED") await syncCapacity(tx, a);
+      changed.push(a.id);
+    });
+  }
+  return changed;
+}

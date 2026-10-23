@@ -225,6 +225,9 @@ model Activity {
   // Full-text search vector over title + description, computed by Postgres. Read-only.
   searchVector Unsupported("tsvector")? @default(dbgenerated("(setweight(to_tsvector('english'::regconfig, COALESCE(title, ''::text)), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, COALESCE(description, ''::text)), 'B'::\"char\"))"))
 
+  // Moderation (FR-8.3): hidden by an admin — invisible to everyone but admins.
+  hiddenAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -272,11 +275,12 @@ model JoinRequest {
 // ─── Chat & notifications ───────────────────────────────────────────────────
 
 model Message {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   activityId String
   senderId   String
   body       String
-  createdAt  DateTime @default(now())
+  hiddenAt   DateTime? // hidden by an admin (FR-8.3)
+  createdAt  DateTime  @default(now())
 
   activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
   sender   User     @relation(fields: [senderId], references: [id], onDelete: Cascade)

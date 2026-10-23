@@ -17,6 +17,20 @@ export const auth = betterAuth({
   },
   // FR-1.3: users can delete their account; DB cascades remove their data.
   user: { deleteUser: { enabled: true } },
+  // FR-8.3: suspended users can't start new sessions (suspending also deletes existing ones).
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const user = await db.user.findUnique({
+            where: { id: session.userId },
+            select: { suspendedAt: true },
+          });
+          return user?.suspendedAt ? false : undefined;
+        },
+      },
+    },
+  },
   socialProviders: googleEnabled
     ? {
         google: {

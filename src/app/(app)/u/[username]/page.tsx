@@ -8,7 +8,11 @@ import { VerifiedBadge } from "@/components/brand/verified-badge";
 import { CategoryIcon } from "@/components/category-icon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getPublicProfile } from "@/features/profile/queries";
+import { hasBlocked } from "@/features/safety/queries";
+import { BlockButton } from "@/features/safety/components/block-button";
+import { ReportButton } from "@/features/safety/components/report-button";
 import { categoryPhoto } from "@/lib/category-media";
+import { getSessionUser } from "@/lib/session";
 import { initials } from "@/lib/utils";
 
 const DATE = new Intl.DateTimeFormat("en-IN", {
@@ -50,8 +54,10 @@ export default function PublicProfilePage({ params }: PageProps<"/u/[username]">
 
 async function Profile({ params }: { params: PageProps<"/u/[username]">["params"] }) {
   const { username } = await params;
-  const profile = await getPublicProfile(username);
+  const [profile, viewer] = await Promise.all([getPublicProfile(username), getSessionUser()]);
   if (!profile) notFound();
+  // FR-8.2: people this user blocked can't see their profile.
+  if (viewer && viewer.id !== profile.id && (await hasBlocked(profile.id, viewer.id))) notFound();
 
   return (
     <>
@@ -96,6 +102,17 @@ async function Profile({ params }: { params: PageProps<"/u/[username]">["params"
           </div>
         </div>
       </header>
+      {viewer && viewer.id !== profile.id ? (
+        <div className="-mt-4 flex flex-wrap justify-end gap-2">
+          <ReportButton
+            targetType="USER"
+            targetId={profile.id}
+            what={profile.name.split(" ")[0] ?? profile.name}
+            variant="button"
+          />
+          <BlockButton userId={profile.id} name={profile.name.split(" ")[0] ?? profile.name} />
+        </div>
+      ) : null}
 
       {profile.interests.length ? (
         <section className="flex flex-col gap-3">

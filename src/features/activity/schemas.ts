@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { istToUtc } from "@/lib/time";
+import { containsProfanity, PROFANITY_MESSAGE } from "@/lib/profanity";
 
 export const DURATIONS = [30, 60, 90, 120, 180, 240, 360, 480] as const;
 export const SKILL_LEVELS = ["ANY", "BEGINNER", "INTERMEDIATE", "PRO"] as const;
@@ -19,13 +20,19 @@ export const venueSchema = z.object({
 /** One schema for the host form (browser) and the Server Actions (server). */
 export const activitySchema = z
   .object({
-    title: z.string().trim().min(4, "Give it a short title").max(80, "Keep it under 80 characters"),
+    title: z
+      .string()
+      .trim()
+      .min(4, "Give it a short title")
+      .max(80, "Keep it under 80 characters")
+      .refine((v) => !containsProfanity(v), PROFANITY_MESSAGE),
     categoryId: z.string().min(1, "Pick a category"),
     description: z
       .string()
       .trim()
       .min(10, "Add a sentence or two")
-      .max(2000, "Keep it under 2000 characters"),
+      .max(2000, "Keep it under 2000 characters")
+      .refine((v) => !containsProfanity(v), PROFANITY_MESSAGE),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
     time: z.string().regex(/^\d{2}:\d{2}$/, "Pick a start time"),
     durationMinutes: z.number().int().min(15).max(720),

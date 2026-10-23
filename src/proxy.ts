@@ -20,6 +20,7 @@ export const config = {
     "/plans/:path*",
     "/chats/:path*",
     "/notifications/:path*",
+    "/admin/:path*",
     "/activities/new",
     "/activities/:id/edit",
     "/activities/:id/manage",

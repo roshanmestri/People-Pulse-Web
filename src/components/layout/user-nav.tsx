@@ -29,7 +29,7 @@ export async function UserNav({ overlay }: { overlay: boolean }) {
   const [profile, unread] = await Promise.all([
     db.user.findUnique({
       where: { id: sessionUser.id },
-      select: { name: true, username: true, image: true },
+      select: { name: true, username: true, image: true, role: true },
     }),
     unreadCount(sessionUser.id),
   ]);
@@ -41,6 +41,7 @@ export async function UserNav({ overlay }: { overlay: boolean }) {
         name={profile?.name || sessionUser.email}
         username={profile?.username ?? null}
         image={profile?.image ?? null}
+        isAdmin={profile?.role === "ADMIN"}
       />
     </div>
   );

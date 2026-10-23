@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaClient } from "@/generated/prisma/client";
 
-import { decideRequest, leaveActivity, requestToJoin } from "./core";
+import { decideRequest, evictFromHostPlans, leaveActivity, requestToJoin } from "./core";
 
 // Real-database concurrency test: many people race for a few spots at the same instant.
 // Without the row lock in core.ts, several of these would succeed and overbook the plan.
@@ -142,6 +142,31 @@ describe("capacity under concurrency (FR-5.4)", () => {
     ).toMatchObject({
       ok: false,
       code: "NOT_HOST",
+    });
+  });
+
+  it("blocking: the blocked person is removed from the host's plans and can't request again", async () => {
+    const activityId = await makeActivity("OPEN");
+    for (const userId of racers.slice(0, SPOTS))
+      await requestToJoin(db, { activityId, userId, message: null });
+    expect(await statusOf(activityId)).toBe("FULL");
+
+    const blocked = racers[0]!;
+    await db.block.create({ data: { blockerId: hostId, blockedId: blocked } });
+    // (racer 0 was also in this host's plans from earlier tests — all of them are left.)
+    expect(await evictFromHostPlans(db, { hostId, userId: blocked })).toContain(activityId);
+    expect(await statusOf(activityId)).toBe("OPEN"); // their spot was freed
+    expect(await requestToJoin(db, { activityId, userId: blocked, message: null })).toMatchObject({
+      ok: false,
+      code: "BLOCKED",
+    });
+
+    const fresh = await makeActivity("REQUEST");
+    expect(
+      await requestToJoin(db, { activityId: fresh, userId: blocked, message: null }),
+    ).toMatchObject({
+      ok: false,
+      code: "BLOCKED",
     });
   });
 });

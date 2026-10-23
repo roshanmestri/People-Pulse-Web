@@ -34,9 +34,13 @@ export type ChatMessage = {
 };
 
 /** The latest messages, oldest first. Polling just refetches this window (small chats). */
-export async function listMessages(activityId: string, limit = 100): Promise<ChatMessage[]> {
+export async function listMessages(
+  activityId: string,
+  { hideSenderIds = [] as string[], limit = 100 } = {},
+): Promise<ChatMessage[]> {
   const rows = await db.message.findMany({
-    where: { activityId },
+    // Hidden by an admin, or from someone the viewer blocked (FR-8.2/8.3).
+    where: { activityId, hiddenAt: null, senderId: { notIn: hideSenderIds } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit,
     select: {

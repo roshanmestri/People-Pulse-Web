@@ -15,9 +15,9 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { initials } from "@/lib/utils";
 
-type Props = { name: string; username: string | null; image: string | null };
+type Props = { name: string; username: string | null; image: string | null; isAdmin: boolean };
 
-export function UserMenu({ name, username, image }: Props) {
+export function UserMenu({ name, username, image, isAdmin }: Props) {
   const router = useRouter();
 
   async function signOut() {
@@ -48,6 +48,11 @@ export function UserMenu({ name, username, image }: Props) {
         {username ? (
           <DropdownMenuItem asChild>
             <Link href={`/u/${username}`}>View public profile</Link>
+          </DropdownMenuItem>
+        ) : null}
+        {isAdmin ? (
+          <DropdownMenuItem asChild>
+            <Link href="/admin">Admin · moderation</Link>
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />

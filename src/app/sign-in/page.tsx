@@ -68,5 +68,18 @@ async function SignInGate({
   const params = await searchParams;
   const next = safeNextPath(typeof params.next === "string" ? params.next : undefined);
   if (await getSessionUser()) redirect(next);
-  return <SignInForm next={next} googleEnabled={isGoogleEnabled} />;
+  return (
+    <>
+      {params.error ? (
+        <p
+          role="alert"
+          className="rounded-2xl bg-destructive/10 p-4 text-sm font-semibold text-destructive"
+        >
+          That sign-in link didn&apos;t work. It may have expired or already been used — request a
+          new one below. If your account was suspended, contact support.
+        </p>
+      ) : null}
+      <SignInForm next={next} googleEnabled={isGoogleEnabled} />
+    </>
+  );
 }

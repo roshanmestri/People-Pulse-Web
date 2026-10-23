@@ -38,6 +38,8 @@ export function resolveCenter(
 export type SearchArgs = Pick<Filters, "q" | "cat" | "r" | "when" | "level" | "open"> & {
   latitude: number;
   longitude: number;
+  /** Hosts this viewer shouldn't see (blocks, either direction). Usually empty. */
+  hideHostIds: string[];
 };
 
 export type DiscoverItem = {
@@ -74,11 +76,14 @@ function whereClause(a: SearchArgs) {
   const conditions: Prisma.Sql[] = [
     Prisma.sql`a.status IN ('OPEN', 'FULL')`,
     Prisma.sql`h."suspendedAt" IS NULL`,
+    Prisma.sql`a."hiddenAt" IS NULL`, // hidden by an admin (FR-8.3)
     Prisma.sql`a."startsAt" >= ${from}`,
     // ST_DWithin on a geography uses the GiST index and measures in metres.
     Prisma.sql`ST_DWithin(a.location, ${point}, ${a.r * 1000})`,
   ];
   if (to) conditions.push(Prisma.sql`a."startsAt" < ${to}`);
+  if (a.hideHostIds.length)
+    conditions.push(Prisma.sql`a."hostId" NOT IN (${Prisma.join(a.hideHostIds)})`);
   if (a.cat.length) conditions.push(Prisma.sql`c.slug IN (${Prisma.join(a.cat)})`);
   // "Beginner" also shows plans open to any level.
   if (a.level) conditions.push(Prisma.sql`a."skillLevel"::text IN (${a.level}, 'ANY')`);
@@ -174,7 +179,7 @@ export async function mapPins(args: SearchArgs) {
     LIMIT 300`;
 }
 
-export function toSearchArgs(f: Filters, center: Center): SearchArgs {
+export function toSearchArgs(f: Filters, center: Center, hideHostIds: string[] = []): SearchArgs {
   return {
     q: f.q,
     cat: f.cat,
@@ -184,6 +189,7 @@ export function toSearchArgs(f: Filters, center: Center): SearchArgs {
     open: f.open,
     latitude: center.latitude,
     longitude: center.longitude,
+    hideHostIds,
   };
 }
 

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { containsProfanity, PROFANITY_MESSAGE } from "@/lib/profanity";
+
 export const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"] as const;
 export const LANGUAGES = [
   "Marathi",
@@ -22,7 +24,12 @@ export const homeAreaSchema = z.object({
 
 /** One schema for the form (client) and the Server Action (server). */
 export const profileSchema = z.object({
-  name: z.string().trim().min(2, "Add your name").max(60),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Add your name")
+    .max(60)
+    .refine((v) => !containsProfanity(v), PROFANITY_MESSAGE),
   username: z
     .string()
     .trim()
@@ -30,7 +37,11 @@ export const profileSchema = z.object({
     .min(3, "At least 3 characters")
     .max(24, "At most 24 characters")
     .regex(/^[a-z0-9._]+$/, "Letters, numbers, dots and underscores only"),
-  bio: z.string().trim().max(280, "Keep it under 280 characters"),
+  bio: z
+    .string()
+    .trim()
+    .max(280, "Keep it under 280 characters")
+    .refine((v) => !containsProfanity(v), PROFANITY_MESSAGE),
   ageRange: z.enum(AGE_RANGES).nullable(),
   languages: z.array(z.enum(LANGUAGES)).max(8),
   interestIds: z.array(z.string().min(1)).min(1, "Pick at least one interest").max(10),

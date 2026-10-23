@@ -52,6 +52,7 @@ export async function getPublicProfile(username: string) {
   const user = await db.user.findUnique({
     where: { username },
     select: {
+      id: true,
       name: true,
       username: true,
       image: true,
@@ -64,7 +65,7 @@ export async function getPublicProfile(username: string) {
       interests: { select: { category: { select: { name: true, slug: true, icon: true } } } },
       _count: { select: { hostedActivities: { where: { status: { not: "DRAFT" } } } } },
       hostedActivities: {
-        where: { status: { in: ["OPEN", "FULL"] } },
+        where: { status: { in: ["OPEN", "FULL"] }, hiddenAt: null },
         orderBy: { startsAt: "asc" },
         take: 4,
         select: {

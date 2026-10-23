@@ -8,6 +8,7 @@ import { Suspense } from "react";
 import { ChatRoom } from "@/features/chat/components/chat-room";
 import { getChatAccess, listMessages } from "@/features/chat/queries";
 import { chatState } from "@/features/chat/rules";
+import { hiddenUserIds } from "@/features/safety/queries";
 import { categoryPhoto } from "@/lib/category-media";
 import { db } from "@/lib/db";
 import { requireSessionUser } from "@/lib/session";
@@ -34,7 +35,7 @@ async function Chat({ params }: { params: PageProps<"/activities/[id]/chat">["pa
 
   const { activity, memberIds } = access;
   const [messages, me] = await Promise.all([
-    listMessages(id),
+    hiddenUserIds(user.id).then((hideSenderIds) => listMessages(id, { hideSenderIds })),
     db.user.findUniqueOrThrow({
       where: { id: user.id },
       select: { id: true, name: true, image: true },

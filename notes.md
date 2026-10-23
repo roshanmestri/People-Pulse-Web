@@ -578,9 +578,45 @@ The header bell and the notifications page both ran "is there a reminder? no →
 
 Notification `payload` is JSON. Filter inside it with `payload: { path: ["activityId"], equals: id }` (Postgres JSON path), e.g. "unread chat alerts for this plan".
 
+## 16. M7 — safety & moderation
+
+### Report (FR-8.1)
+
+`ReportButton` (dialog) on plans, profiles and other people's chat messages → `reportContent` Server Action: Zod (`features/safety/schemas.ts`), target must exist, can't report yourself, one open report per target per person, max 10/day. Reports go to the admin queue; the reported person isn't told who.
+
+### Block (FR-8.2)
+
+`BlockButton` on profiles (explains exactly what happens) → `blockUser`:
+
+- **Both directions hidden:** `hiddenUserIds(viewer)` = people who blocked you + people you blocked. Explore adds `a."hostId" NOT IN (…)` (the list is part of the cache key — empty for nearly everyone, so cache entries stay shared). Plan pages and profiles return a plain **404** (nothing to discover). Their chat messages are filtered out for you.
+- **Removed from your plans:** `evictFromHostPlans` (join core) marks their pending/approved requests `REMOVED` under the same row lock as M5, so spots free up correctly; they also can't request again (`BLOCKED`).
+- Unblock from **/me → Blocked people**.
+
+### Admin (FR-8.3) — `/admin`
+
+- **Roles:** `User.role = ADMIN`. `npm run make-admin -- you@example.com` promotes (or creates) an admin; the account menu then shows "Admin · moderation".
+- **Every** admin page calls `requireAdmin()` and **every** admin Server Action calls `getAdminUser()`. Non-admins get a 404. Hiding buttons is UX, the server check is the security.
+- **Reports:** open/resolved queue with a preview of the target and how many open reports it has → Dismiss, **Hide plan / Hide message** (`hiddenAt`, new migration), or **Suspend** the user/host/sender. Acting resolves all open reports on that target.
+- **Users:** search; **Suspend** = set `suspendedAt` + delete their sessions (signed out everywhere) + a **Better Auth `databaseHooks.session.create.before`** that returns `false` for suspended users, so they can't sign back in. Their plans leave Explore. **Revoke/restore verified badge** with a reason the user sees on `/me` (FR-2.5).
+- **Categories:** add (name, slug, lucide icon) and hide/show. `updateTag("categories")` refreshes the cached list everywhere.
+- **Pattern — pre-bound Server Actions:** the server page passes `setUserSuspended.bind(null, user.id, true)` to a generic client `ActionButton`. The browser just calls it; the ID is baked in on the server.
+- **Pattern — GET search form:** `/admin/users` uses a plain `<form action="/admin/users">` so the search lands in the URL (`?q=`) with zero client JS.
+
+### Profanity filter (FR-8.4)
+
+`src/lib/profanity.ts`: lower-cases, undoes leetspeak (`sh1t`), collapses stretched letters (`fuuuck`) and matches **whole words** from a small English + Hindi/Marathi list — so "Scunthorpe", "assessment", "Shitake", "Dickens" are fine (unit-tested). Added as a Zod `refine` on plan titles/descriptions and profile names/bios, so the form shows the message instantly and the server enforces the same rule.
+
+### Smaller bits
+
+- **After a schema change, restart `npm run dev`.** `src/lib/db.ts` keeps one Prisma client on `globalThis` across hot reloads (to avoid opening a new connection pool on every save) — so a running dev server keeps the _old_ client and fails with errors like `Unknown field hiddenAt`. Restarting picks up the newly generated client.
+
+- Sign-in page explains failed links (`?error=link`): expired/used link or suspended account.
+- `scripts/` run with `tsx` as CommonJS → no top-level `await`; wrap in `main()` (same as the seed).
+- shadcn CLI asked to overwrite `button.tsx` when adding `dialog`; answered "no" — never let a generator silently replace files you own.
+
 ---
 
-## 16. Progress log
+## 17. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
@@ -589,6 +625,6 @@ Notification `payload` is JSON. Filter inside it with `payload: { path: ["activi
 - [x] M4 Discover (2026-10-23)
 - [x] M5 Join flow (2026-10-23)
 - [x] M6 Chat & notifications (2026-10-23)
-- [ ] M7 Safety
+- [x] M7 Safety (2026-10-23)
 - [ ] M8 Quality
 - [ ] M9 Deploy
