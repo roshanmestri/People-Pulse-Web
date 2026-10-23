@@ -114,21 +114,21 @@ The backend is **TypeScript running on Node.js**, inside Next.js (Server Actions
 
 ## 7. Libraries — one-line notes
 
-| Library                   | What it does                                      | Config notes                                                                       |
-| ------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Tailwind CSS**          | Utility classes for styling                       | Design tokens (colours, fonts) in global CSS                                       |
-| **shadcn/ui**             | Copy-paste accessible components (built on Radix) | `npx shadcn@latest add button` — code lands in `components/ui`, you own it         |
-| **Zod**                   | Describe the shape of data and validate it        | One schema used by the form AND the server action                                  |
-| **React Hook Form**       | Fast forms with few re-renders                    | Use `zodResolver(schema)`                                                          |
-| **Auth.js / Better Auth** | Login, sessions, Google OAuth                     | Needs `AUTH_SECRET`, provider keys, Prisma adapter tables                          |
-| **TanStack Query**        | Fetch/cache data in Client Components             | Only where needed (chat polling, infinite scroll)                                  |
-| **react-leaflet**         | Map component                                     | Must be a Client Component; load with `dynamic(() => import(...), { ssr: false })` |
-| **date-fns**              | Date formatting/maths                             | Keep times stored in UTC, show in local time                                       |
-| **Vitest**                | Unit tests (fast, Vite-like)                      | Test pure logic: capacity rules, validators                                        |
-| **Playwright**            | Browser end-to-end tests                          | Test flows: sign in → create → join                                                |
-| **ESLint / Prettier**     | Catch bugs / auto-format                          | Run on save + pre-commit                                                           |
-| **Husky + lint-staged**   | Run lint before each commit                       | —                                                                                  |
-| **Docker**                | Runs Postgres in a container                      | `docker compose up -d`                                                             |
+| Library                 | What it does                                              | Config notes                                                                               |
+| ----------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Tailwind CSS**        | Utility classes for styling                               | Design tokens (colours, fonts) in global CSS                                               |
+| **shadcn/ui**           | Copy-paste accessible components (built on Radix)         | `npx shadcn@latest add button` — code lands in `components/ui`, you own it                 |
+| **Zod**                 | Describe the shape of data and validate it                | One schema used by the form AND the server action                                          |
+| **React Hook Form**     | Fast forms with few re-renders                            | Use `zodResolver(schema)`                                                                  |
+| **Better Auth**         | Sign-in (magic link + Google), DB sessions, rate limiting | `src/lib/auth.ts` (server), `src/lib/auth-client.ts` (browser), `/api/auth/[...all]` route |
+| **TanStack Query**      | Fetch/cache data in Client Components                     | Only where needed (chat polling, infinite scroll)                                          |
+| **react-leaflet**       | Map component                                             | Must be a Client Component; load with `dynamic(() => import(...), { ssr: false })`         |
+| **date-fns**            | Date formatting/maths                                     | Keep times stored in UTC, show in local time                                               |
+| **Vitest**              | Unit tests (fast, Vite-like)                              | Test pure logic: capacity rules, validators                                                |
+| **Playwright**          | Browser end-to-end tests                                  | Test flows: sign in → create → join                                                        |
+| **ESLint / Prettier**   | Catch bugs / auto-format                                  | Run on save + pre-commit                                                                   |
+| **Husky + lint-staged** | Run lint before each commit                               | —                                                                                          |
+| **Docker**              | Runs Postgres in a container                              | `docker compose up -d`                                                                     |
 
 ---
 
@@ -273,13 +273,92 @@ SELECT title FROM "Activity" WHERE "searchVector" @@ websearch_to_tsquery('engli
 
 `npm run db:studio` → Prisma Studio in the browser. (`Unsupported` columns like `location` don't show there; use `docker exec -it gathr-db psql -U gathr gathr`.)
 
+## 11. M2 — auth, profile and the v2 app shell
+
+### Design → code
+
+- The locked **v2 design** (BRD §14) lives in `globals.css` as tokens: `--primary` = orange `#ff5b22` (with dark text on it), `--brand-deep` (deep orange text), `--verified` (blue tick). Use them as Tailwind classes: `bg-primary`, `text-brand-deep`, `fill-verified`.
+- Font: **Plus Jakarta Sans** via `next/font/google` → self-hosted, exposed as `--font-sans`.
+- Photos live in `public/images/` (Unsplash, credits in `CREDITS.md`) and render with **`next/image`** (`<Image fill sizes=…>`): automatic resizing, modern formats, lazy loading. Use `priority` only for the above-the-fold hero.
+
+### Route groups & layouts
+
+```
+src/app/
+├─ (marketing)/page.tsx        → "/" landing (fully static)
+├─ (app)/layout.tsx            → header + mobile tab bar for app pages
+│  ├─ explore, plans, chats, activities/new   (placeholders for M3–M6)
+│  ├─ onboarding/, me/, u/[username]/
+├─ sign-in/page.tsx            → own split layout (photo + form)
+└─ api/auth/[...all]/route.ts  → Better Auth
+```
+
+Folders in `(parentheses)` group routes and give them a shared layout **without** appearing in the URL — like nested `<Outlet>` layouts chosen by folder.
+
+### Better Auth (what / why / config)
+
+- **What:** handles sign-in, sessions and accounts. Chosen over Auth.js (still beta).
+- **Server config** `src/lib/auth.ts`: Prisma adapter, 30-day DB sessions, **magic link** plugin, **Google** (turns on only when `GOOGLE_CLIENT_ID/SECRET` are set), built-in **rate limiting** (magic link: 5 requests/min per IP → you'll see `429` if you spam it), account deletion enabled, `nextCookies()` last so Server Actions can set cookies.
+- **Route handler** `/api/auth/[...all]`: a catch-all URL (`[...all]` = every sub-path) that forwards to Better Auth — this _is_ the auth API.
+- **Client** `src/lib/auth-client.ts`: `authClient.signIn.magicLink()`, `signIn.social()`, `signOut()`, `revokeSessions()`, `deleteUser()` for Client Components.
+- **Dev email:** there's no email provider yet, so the magic link is printed in the `npm run dev` terminal (`✉️ Magic link for …`). Open it to sign in. To log in as seed data, use e.g. `aarav.kulkarni@seed.gathr.dev`.
+- **Tables:** Better Auth needs `User` (with boolean `emailVerified`), `Session`, `Account`, `Verification`. The M2 migration reshaped them and was hand-edited to keep data (`emailVerified` date → boolean in place, `costNote` renamed to `priceNote`).
+
+### Reading the session (Data Access Layer)
+
+- `src/lib/session.ts` → `getSessionUser()` / `requireSessionUser()`. One place that answers "who is signed in?". Pages, Server Actions and Route Handlers all go through it.
+- **Cache Components rule:** reading the session = reading request cookies = request-time data. It must happen **inside a component wrapped in `<Suspense>`** (e.g. `<MeContent>` inside `/me`), not at the top of a page or layout. The rest of the page stays a fast static shell (build output shows `◐ Partial Prerender`).
+- Same rule for client hooks that read the URL, e.g. `usePathname()` on dynamic routes → the tab bar is wrapped in `<Suspense>` with a static fallback.
+
+### Proxy (Next 16's new name for middleware)
+
+- `src/proxy.ts` runs **before** `/me` and `/onboarding` load. It only checks that a session cookie exists and redirects to `/sign-in?next=…` if not — a fast, optimistic gate. The real check still happens in the page via `requireSessionUser()`.
+- `safeNextPath()` only allows relative redirects (`/me`), never `//evil.com` (open-redirect protection).
+
+### Your first Server Action — `saveProfile` (`src/features/profile/actions.ts`)
+
+- A function in a `"use server"` file. The form calls it like a normal async function; Next turns it into a POST request for you — no `fetch('/api/…')`, no REST route.
+- **Anyone can call it**, so it: checks the session → validates with the **same Zod schema** as the form (`profileSchema`) → checks the username is free → replaces interests + updates the profile in **one transaction** → recalculates the verified badge.
+- Returns a typed result `{ ok: true } | { ok: false, error, fieldErrors }`; the form shows field errors inline and a toast.
+- **`updateTag('user:<username>')`**: the public profile query is cached with `"use cache"` + `cacheTag(...)`; after saving we expire that tag so the next visit shows fresh data ("read your own writes").
+
+### Forms: React Hook Form + Zod
+
+- `useForm({ resolver: zodResolver(profileSchema) })` validates in the browser with the exact rules the server uses.
+- Custom inputs (interest tiles, language chips, home-area picker) use `<Controller>` to plug into the form.
+
+### Caching data: `"use cache"`
+
+- `getCategories()` → `"use cache"` + `cacheLife("hours")`: shared by every request for hours.
+- `getPublicProfile(username)` → `cacheLife("minutes")` + `cacheTag("user:…")` (see `updateTag` above). Its arguments are part of the cache key, so each username has its own entry.
+- `getMyProfile()` is **not** cached — your own private data should always be fresh.
+
+### Verified-host badge (BRD FR-2.5)
+
+- Rules live in pure functions in `src/features/profile/verification.ts`: verified email + name + photo + bio + home area + ≥1 interest, and not revoked by an admin.
+- `/me` shows a checklist ("5/6"). Photo upload arrives with image uploads in M3; Google sign-in fills the photo automatically.
+- The seed marks ~2/3 of seed users as verified so the UI has examples.
+
+### Home area (privacy)
+
+- Search / "use my location" go through **Server Actions** that call OpenStreetMap **Nominatim** (free geocoding). Proxying through the server lets us send the required `User-Agent`, limits it to signed-in users, and the picker debounces typing (Nominatim allows ~1 request/second).
+- We store the exact coordinates (private) but only ever show `homeAreaName` publicly. The public profile query doesn't even select email or coordinates.
+
+### npm `overrides` (dependency fixes)
+
+Two installs failed with `ERESOLVE` because of _optional_ peer dependencies deep in the tree. Fixed in `package.json` → `"overrides"`: pin `@babel/plugin-transform-runtime` to v7, and `"zod": "$zod"` (= "use our one Zod 4 everywhere"). Cleaner than `--legacy-peer-deps`, which hides real conflicts.
+
+### How M2 was verified
+
+Lint, types, format, production build; HTTP checks (proxy redirect, magic link → new user → `/onboarding`); and a scripted real-Chrome run: sign in → onboarding (interests, languages, live area search) → save → `/me` → public profile (no email leaked) → invalid username rejected → sign out → seed user on mobile with verified badge.
+
 ---
 
-## 11. Progress log
+## 12. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
-- [ ] M2 Auth & profile
+- [x] M2 Auth & profile (2026-10-23)
 - [ ] M3 Create activity
 - [ ] M4 Discover
 - [ ] M5 Join flow

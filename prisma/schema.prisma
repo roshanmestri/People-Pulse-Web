@@ -72,13 +72,13 @@ enum ReportStatus {
   DISMISSED
 }
 
-// ─── Users & auth (shape required by the Auth.js Prisma adapter) ────────────
+// ─── Users & auth (shape required by Better Auth's Prisma adapter) ────────────
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
+  id            String  @id @default(cuid())
+  name          String
+  email         String  @unique
+  emailVerified Boolean @default(false)
   image         String?
 
   username  String?  @unique
@@ -93,6 +93,11 @@ model User {
   // Computed by Postgres from the two columns above (see migration SQL). Read-only.
   homeLocation  Unsupported("geography(Point, 4326)")? @default(dbgenerated("\nCASE\n    WHEN ((\"homeLatitude\" IS NULL) OR (\"homeLongitude\" IS NULL)) THEN NULL::geography\n    ELSE (st_setsrid(st_makepoint(\"homeLongitude\", \"homeLatitude\"), 4326))::geography\nEND"))
   homeAreaName  String?
+
+  // Verified-host badge (BRD FR-2.5): set when email is verified and the profile is complete.
+  verifiedAt                DateTime?
+  verificationRevokedAt     DateTime?
+  verificationRevokedReason String?
 
   suspendedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -113,32 +118,32 @@ model User {
 }
 
 model Account {
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([provider, providerAccountId])
   @@index([userId])
 }
 
 model Session {
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -147,12 +152,16 @@ model Session {
   @@index([userId])
 }
 
-model VerificationToken {
+// Short-lived tokens (magic links, email verification).
+model Verification {
+  id         String   @id @default(cuid())
   identifier String
-  token      String
-  expires    DateTime
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  @@id([identifier, token])
+  @@index([identifier])
 }
 
 // ─── Categories & interests ─────────────────────────────────────────────────
@@ -200,7 +209,8 @@ model Activity {
   status         ActivityStatus @default(DRAFT)
   preferenceNote String? // gender/age preference: displayed, never enforced
   whatToBring    String?
-  costNote       String? // e.g. "Court fee ₹100 each" — informational only
+  pricePerPerson Int            @default(0) // ₹ per person, 0 = free. Informational only — no payments (BRD FR-3).
+  priceNote      String? // e.g. "court fee, split at the venue"
   coverImage     String?
 
   // Venue. Exact coordinates/venue are private; public responses use areaName + rounded coords.

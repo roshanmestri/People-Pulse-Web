@@ -74,6 +74,8 @@ function istDate(dayOffset: number, hour: number, minute = 0) {
     ),
   );
 }
+/** "Court fee ₹120 each" → 120; no ₹ amount → 0 (free / pay-as-you-go). */
+const priceFromNote = (note?: string) => Number(note?.match(/₹\s?(\d+)/)?.[1] ?? 0);
 const minDate = (a: Date, b: Date) => (a < b ? a : b);
 
 // ─── Categories (BRD §2) ────────────────────────────────────────────────────
@@ -344,7 +346,7 @@ type Template = {
   skill: SkillLevel;
   tags: string[];
   whatToBring?: string;
-  costNote?: string;
+  priceNote?: string;
   preferenceNote?: string;
 };
 
@@ -363,7 +365,7 @@ const TEMPLATES: Template[] = [
     skill: "ANY",
     tags: ["cricket", "tennis-ball", "weekend"],
     whatToBring: "Water, cap, sports shoes",
-    costNote: "Ball & tape ₹50 each",
+    priceNote: "Ball & tape ₹50 each",
   },
   {
     category: "sports-fitness",
@@ -379,7 +381,7 @@ const TEMPLATES: Template[] = [
     skill: "INTERMEDIATE",
     tags: ["badminton", "doubles"],
     whatToBring: "Your own racquet, non-marking shoes",
-    costNote: "Court fee ₹120 each",
+    priceNote: "Court fee ₹120 each",
   },
   {
     category: "sports-fitness",
@@ -394,7 +396,7 @@ const TEMPLATES: Template[] = [
     joinMode: "OPEN",
     skill: "ANY",
     tags: ["football", "turf"],
-    costNote: "Turf booking ₹200 each",
+    priceNote: "Turf booking ₹200 each",
   },
   {
     category: "sports-fitness",
@@ -440,7 +442,7 @@ const TEMPLATES: Template[] = [
     joinMode: "OPEN",
     skill: "ANY",
     tags: ["open-mic", "poetry", "music"],
-    costNote: "Order something at the café",
+    priceNote: "Order something at the café",
   },
   {
     category: "dance",
@@ -457,7 +459,7 @@ const TEMPLATES: Template[] = [
     skill: "BEGINNER",
     tags: ["salsa", "latin", "partner-dance"],
     whatToBring: "Comfortable shoes",
-    costNote: "Hall rent ₹100 each",
+    priceNote: "Hall rent ₹100 each",
   },
   {
     category: "events-concerts",
@@ -472,7 +474,7 @@ const TEMPLATES: Template[] = [
     joinMode: "REQUEST",
     skill: "ANY",
     tags: ["comedy", "stand-up"],
-    costNote: "Tickets ~₹499, buy your own",
+    priceNote: "Tickets ~₹499, buy your own",
   },
   {
     category: "workshops",
@@ -488,7 +490,7 @@ const TEMPLATES: Template[] = [
     skill: "BEGINNER",
     tags: ["pottery", "art", "hands-on"],
     whatToBring: "Clothes you don't mind getting muddy",
-    costNote: "Material fee ₹600",
+    priceNote: "Material fee ₹600",
   },
   {
     category: "workshops",
@@ -549,7 +551,7 @@ const TEMPLATES: Template[] = [
     skill: "INTERMEDIATE",
     tags: ["nextjs", "typescript", "web"],
     whatToBring: "Laptop (optional)",
-    costNote: "Pizza split ~₹150",
+    priceNote: "Pizza split ~₹150",
   },
   {
     category: "tutorials-tech-talks",
@@ -715,7 +717,7 @@ const TEMPLATES: Template[] = [
     skill: "INTERMEDIATE",
     tags: ["trek", "fort", "sunrise"],
     whatToBring: "2 L water, snacks, torch",
-    costNote: "Cab share ~₹250",
+    priceNote: "Cab share ~₹250",
   },
   {
     category: "outdoors-travel",
@@ -746,7 +748,7 @@ const TEMPLATES: Template[] = [
     joinMode: "REQUEST",
     skill: "ANY",
     tags: ["board-games", "catan"],
-    costNote: "Café cover ₹200 each",
+    priceNote: "Café cover ₹200 each",
   },
   {
     category: "games-hobbies",
@@ -776,7 +778,7 @@ const TEMPLATES: Template[] = [
     joinMode: "REQUEST",
     skill: "ANY",
     tags: ["street-food", "food-walk"],
-    costNote: "Pay for what you eat (~₹300)",
+    priceNote: "Pay for what you eat (~₹300)",
   },
   {
     category: "food-social",
@@ -888,7 +890,9 @@ async function seedUsers(categoryIds: Map<string, string>) {
           name: user.name,
           username,
           email: `${username}@${SEED_EMAIL_DOMAIN}`,
-          emailVerified: NOW,
+          emailVerified: true,
+          // Simulate the verified-host badge (BRD FR-2.5) for about two thirds of seed users.
+          verifiedAt: i % 3 === 2 ? null : NOW,
           bio: user.bio,
           ageRange: user.ageRange,
           languages: user.languages,
@@ -976,7 +980,8 @@ async function seedActivities(
         status,
         preferenceNote: template.preferenceNote,
         whatToBring: template.whatToBring,
-        costNote: template.costNote,
+        priceNote: template.priceNote,
+        pricePerPerson: priceFromNote(template.priceNote),
         venueName: template.venue.replace("{area}", area.name),
         latitude: jitter(area.lat),
         longitude: jitter(area.lng),
