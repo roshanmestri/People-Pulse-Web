@@ -36,6 +36,8 @@ jobs:
       BETTER_AUTH_SECRET: ci-only-secret-0000000000000000000000000000
       BETTER_AUTH_URL: http://localhost:3000
       SITE_URL: http://localhost:3000
+      # No real email in CI: print magic links to the server log (tests read tokens from the DB).
+      EMAIL_LOG_ONLY: "true"
 
     steps:
       - uses: actions/checkout@v4

@@ -3,19 +3,24 @@ import "server-only";
 /**
  * Sends email through Resend's HTTP API (https://resend.com/docs/api-reference/emails/send-email).
  * One `fetch` call, so no SDK. Turned on by RESEND_API_KEY; without it, development prints
- * the email to the terminal instead.
+ * the email to the terminal instead. EMAIL_LOG_ONLY=true does the same in a production build;
+ * it's for CI / Playwright runs only (src/lib/env.ts refuses it on Vercel).
  *
  * EMAIL_FROM must use a domain verified in Resend. Until you verify one, Resend's test
  * sender "onboarding@resend.dev" can only deliver to your own Resend account's address.
  */
 type Email = { to: string; subject: string; text: string; html: string };
 
-export const isEmailEnabled = Boolean(process.env.RESEND_API_KEY);
+const logOnly =
+  process.env.EMAIL_LOG_ONLY === "true" ||
+  (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY);
+
+/** Can we deliver (or, in development and tests, print) a sign-in email? */
+export const isEmailEnabled = logOnly || Boolean(process.env.RESEND_API_KEY);
 
 export async function sendEmail(email: Email) {
-  if (!isEmailEnabled) {
-    if (process.env.NODE_ENV === "production")
-      throw new Error("Email is not configured (RESEND_API_KEY is missing).");
+  if (!isEmailEnabled) throw new Error("Email is not configured (RESEND_API_KEY is missing).");
+  if (logOnly) {
     console.log(`\n✉️  Email to ${email.to}: ${email.subject}\n${email.text}\n`);
     return;
   }

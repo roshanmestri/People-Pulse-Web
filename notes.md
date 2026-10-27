@@ -753,6 +753,16 @@ A failing step marks the commit with a red ✗. The Playwright report is uploade
 - Secrets in that file are fake, test-only values; real ones live only in Vercel.
 - Playwright config: `process.env.CI` switches to `npm start`, 1 retry, and never reuses a server.
 - **Rate-limit math:** a fresh CI run signs in 4 users in global setup, plus 1 in `auth.spec`. That's exactly 5 magic links, the per-minute limit.
+- **First CI run failed, and it was a real bug.** In a production build with no Resend key:
+  - the sign-in page hid the email form
+  - the magic-link request threw "Email is not configured"
+
+  Locally, the browser tests reuse saved sessions, so they never requested a link. CI starts from nothing.
+  - **Fix:** `EMAIL_LOG_ONLY=true` (set in `ci.yml` and Playwright's `webServer.env`) prints emails in a production build. `env.ts` refuses it on Vercel.
+  - **Reproduce CI locally:** `rm -rf tests/e2e/.state && EMAIL_LOG_ONLY=true npm run build && CI=true npx playwright test` (stop `npm run dev` first, since CI mode needs port 3000).
+
+- **Build-time vs runtime env:** parts of pages are prerendered during `next build`, so they see the env variables from **build** time. On Vercel, changing an env variable takes effect only after a **redeploy**.
+- **Reading CI results:** the repo's **Actions** tab, then the run, then the red step. Full logs need you signed in to GitHub.
 
 ---
 

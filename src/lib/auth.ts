@@ -63,4 +63,4 @@ export const auth = betterAuth({
 
 export const isGoogleEnabled = googleEnabled;
 /** Email sign-in needs a real email sender in production (development prints the link). */
-export const isMagicLinkEnabled = isEmailEnabled || process.env.NODE_ENV !== "production";
+export const isMagicLinkEnabled = isEmailEnabled;

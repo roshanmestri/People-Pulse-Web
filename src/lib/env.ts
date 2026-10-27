@@ -26,6 +26,9 @@ export function checkEnv() {
       "BLOB_READ_WRITE_TOKEN: required on Vercel (connect a Blob store to the project)",
     );
 
+  if (process.env.VERCEL && process.env.EMAIL_LOG_ONLY === "true")
+    problems.push("EMAIL_LOG_ONLY: tests only; on Vercel it would print sign-in links to the logs");
+
   if (problems.length)
     throw new Error(`Invalid environment variables:\n  - ${problems.join("\n  - ")}`);
 

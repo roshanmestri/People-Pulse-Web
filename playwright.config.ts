@@ -24,6 +24,8 @@ export default defineConfig({
   projects: [{ name: "chrome", use: { ...devices["Desktop Chrome"], channel: "chrome" } }],
   webServer: {
     command: process.env.CI ? "npm start" : "npm run dev",
+    // A production build has no email sender in tests; print magic links instead (src/lib/email.ts).
+    env: { EMAIL_LOG_ONLY: "true" },
     url: "http://localhost:3000/sign-in",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
