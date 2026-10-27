@@ -42,7 +42,7 @@ export function ResultsList({ initialItems, initialCursor, query, compact }: Pro
       >
         {items.map((item, i) => (
           <li key={item.id}>
-            <ActivityCard item={item} eager={i < 3} />
+            <ActivityCard item={item} eager={i < 3} priority={i === 0} />
           </li>
         ))}
       </ul>

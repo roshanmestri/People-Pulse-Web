@@ -24,7 +24,15 @@ function spots(item: Pick<DiscoverItem, "maxPeople" | "going" | "status">) {
  * The v2 photo card. No hooks or browser APIs, so it renders on the server for the
  * first page and inside the client "Load more" list for later pages.
  */
-export function ActivityCard({ item, eager = false }: { item: DiscoverItem; eager?: boolean }) {
+type CardProps = {
+  item: DiscoverItem;
+  /** Above the fold: load now instead of lazily. */
+  eager?: boolean;
+  /** The first card is usually the page's largest image (LCP), so fetch it first. */
+  priority?: boolean;
+};
+
+export function ActivityCard({ item, eager = false, priority = false }: CardProps) {
   const s = spots(item);
   const photo = item.coverImage ?? categoryPhoto(item.categorySlug) ?? "/images/hero-football.jpg";
   return (
@@ -38,7 +46,8 @@ export function ActivityCard({ item, eager = false }: { item: DiscoverItem; eage
           alt=""
           fill
           sizes="(min-width: 1280px) 400px, (min-width: 640px) 50vw, 100vw"
-          loading={eager ? "eager" : "lazy"}
+          loading={eager || priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : undefined}
           className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
         />
         <span className="absolute top-3 left-3 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-[#0f0f10]">

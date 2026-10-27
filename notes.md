@@ -614,9 +614,70 @@ Notification `payload` is JSON. Filter inside it with `payload: { path: ["activi
 - `scripts/` run with `tsx` as CommonJS → no top-level `await`; wrap in `main()` (same as the seed).
 - shadcn CLI asked to overwrite `button.tsx` when adding `dialog`; answered "no" — never let a generator silently replace files you own.
 
+## 17. M8 — quality
+
+### Playwright: tests that drive a real browser
+
+**What:** `@playwright/test` opens Chrome, clicks through the app like a person, and checks what's on screen. Vitest tests functions; Playwright tests whole flows across pages, server and database.
+**Run:** `npm run test:e2e` (report: `npm run test:e2e:report`). If `npm run dev` is already running, it reuses it; otherwise it starts one.
+**Config (`playwright.config.ts`):** tests in `tests/e2e`, real Chrome (`channel: "chrome"`), `workers: 1` because all tests share one database, plus `globalSetup` / `globalTeardown`.
+
+- **Global setup** (`tests/e2e/global-setup.ts`) runs once before all tests:
+  - upserts 4 fixed accounts (`host / member / outsider / admin @e2e.gathr.test`)
+  - wipes whatever they made last time
+  - creates two fresh plans (one "request to join", one "open")
+  - signs each account in once through the **real magic link**, reading the token from the `Verification` table
+  - saves the cookies with `storageState`
+- **Saved sessions are reused** while they're still valid in the DB, so re-runs send no magic links and don't hit the 5/min rate limit. The files live in `tests/e2e/.state/` (git-ignored, because they're live session cookies).
+- **Fixtures** (`support/fixtures.ts`): `as("member")` gives a page already signed in as that user, so one test can use two people at once (host approves, member sees "You're in").
+- **The DB is checked directly with `pg`, not the app's Prisma client.** A test shouldn't trust the code it's testing. Also, Playwright loads tests as CommonJS, and our generated Prisma client is an ES module.
+- **Specs:**
+  - `auth`: magic link, onboarding, protected pages
+  - `explore`: search, filters in the URL, no exact coordinates
+  - `host`: create, edit, cancel
+  - `join`: request → approve, open join, full plan
+  - `chat`: members only
+  - `safety`: report → admin hides; block/unblock
+  - `a11y`
+- **Gotchas:**
+  - ESLint's React `rules-of-hooks` thinks Playwright's fixture callback `use(...)` is React's `use` hook, so the parameter is named `provide`.
+  - Tests that change shared data must undo or reset it first (the join test deletes the member's old request).
+
+### Accessibility checks: axe-core
+
+**What:** `@axe-core/playwright` scans the rendered page for WCAG problems (contrast, missing labels, wrong list markup…). `a11y.spec.ts` scans 12 key pages, signed in and signed out, and fails on **serious/critical** issues.
+**Found and fixed:** in the chat, the auto-scroll anchor `<div>` sat inside the `<ol>`. A list may only contain `<li>`, and screen readers get confused otherwise, so the anchor now sits outside the list.
+
+### Error, 404 and loading screens (Next.js file conventions)
+
+In plain React you'd write an `<ErrorBoundary>` and a `<Suspense>` yourself. In the App Router, **special file names** do it for you, per folder:
+
+| File                   | What it is                                                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(app)/loading.tsx`    | Wrapped around the page as a `<Suspense fallback>` automatically. Shows a skeleton the moment you click a link, before the server responds.                                                    |
+| `(app)/error.tsx`      | An error boundary around the page (must be `"use client"`). It receives the `error` and `retry()`, which re-renders the segment. The header stays, because the layout is outside the boundary. |
+| `app/global-error.tsx` | Last resort if the **root layout** itself crashes. It replaces the whole document, so it renders its own `<html>` and `<body>`.                                                                |
+| `app/not-found.tsx`    | The 404 page, for unknown URLs and every `notFound()` call (hidden or blocked plans, admin pages for non-admins).                                                                              |
+
+In production, the browser never sees the real error message, only a `digest` ID that matches the server log.
+
+### Lighthouse
+
+**What:** Chrome's audit tool. It loads a page as a **slow phone** (simulated 4G network, 4× slower CPU) and scores Performance, Accessibility, Best practices and SEO from 0 to 100.
+**Always measure the production build:** `npm run build && npx next start -p 3100`. Dev mode is unminified and compiles on demand, so it scores badly no matter what.
+**Run:** `CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npx lighthouse@12 http://localhost:3100/explore --chrome-flags="--headless=new" --view`. Or open Chrome DevTools → Lighthouse tab.
+
+- **Take the median of 3 runs, after a warm-up request.** The first run after `next start` scored 85 just from cold start; the next three scored 92.
+- **LCP (Largest Contentful Paint)** is the metric that moved. It measures when the biggest thing on screen, usually the hero photo, appears.
+  - The page's main image should be `loading="eager"` + `fetchPriority="high"`. This replaces `priority`, which is deprecated in Next 16.
+  - On Explore, the biggest image is the **first result card**, not the small header photo. It was being fetched at "Low" priority, so the first card now gets `priority`. Explore went from 78 to 90.
+- **Shell gotcha:** in zsh, `for p in $LIST` does **not** split a string on spaces (bash does). Use an array, `LIST=(a b c)`.
+- **"Missing meta description" on plan pages is a false alarm.** Next 16 **streams metadata**: for normal browsers, `<title>`/`<meta>` arrive with the streamed page instead of making the whole response wait for the DB. Link-preview bots (WhatsApp, Slack, Facebook…) get it in `<head>` as usual, and Googlebot runs JS. Lighthouse 12's user agent counts as a normal browser, so it doesn't see it.
+- Scores are recorded in `README.md`.
+
 ---
 
-## 17. Progress log
+## 18. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
@@ -626,5 +687,5 @@ Notification `payload` is JSON. Filter inside it with `payload: { path: ["activi
 - [x] M5 Join flow (2026-10-23)
 - [x] M6 Chat & notifications (2026-10-23)
 - [x] M7 Safety (2026-10-23)
-- [ ] M8 Quality
+- [x] M8 Quality (2026-10-27)
 - [ ] M9 Deploy
