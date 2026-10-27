@@ -684,7 +684,7 @@ Big picture (with diagrams): `docs/shipping-gathr.pdf`. Choices: **Vercel** (app
 | Laptop                         | Production                     | Where in code                                              |
 | ------------------------------ | ------------------------------ | ---------------------------------------------------------- |
 | Docker Postgres                | Neon                           | nothing, just `DATABASE_URL`                               |
-| `.data/uploads` folder         | Vercel Blob                    | `src/lib/storage.ts` (switches on `BLOB_READ_WRITE_TOKEN`) |
+| `.data/uploads` folder         | Vercel Blob                    | `src/lib/storage.ts` (switches on `BLOB_STORE_ID`)         |
 | Magic link printed in terminal | Email via Resend               | `src/lib/email.ts` (switches on `RESEND_API_KEY`)          |
 | `.env`                         | Vercel → Environment Variables | nothing                                                    |
 
@@ -694,7 +694,7 @@ Each switch is "is the key set?", so local development works with no accounts at
 
 **What:** a cloud folder for files. `put("covers/<uuid>.webp", data, { access: "public" })` returns a public `https://….public.blob.vercel-storage.com/…` URL, and `del(url)` removes the file.
 **Why:** Vercel functions have no permanent disk. A file written there disappears when that function instance stops.
-**Config:** `BLOB_READ_WRITE_TOKEN` (set automatically when you connect a Blob store to the Vercel project). `next.config.ts` → `images.remotePatterns` lets `next/image` optimise images from that host.
+**Config:** set automatically when you connect a Blob store to the Vercel project. Newer stores set `BLOB_STORE_ID` and authenticate with Vercel's OIDC token (a short-lived login Vercel hands each function, so there's no long-lived secret to leak); older stores set `BLOB_READ_WRITE_TOKEN`. The code accepts either. The store must be created with **Public** access, because the app shows photos by plain URL; a Private store rejects `access: "public"` uploads, and you can't switch a store's access later. `next.config.ts` → `images.remotePatterns` lets `next/image` optimise images from that host.
 
 ### The 4.5 MB upload limit → shrink photos in the browser
 

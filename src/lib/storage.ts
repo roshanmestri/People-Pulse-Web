@@ -9,10 +9,11 @@ import { del, put } from "@vercel/blob";
 /**
  * Where uploaded files live, behind three functions so the rest of the app doesn't care:
  * - Production (Vercel): Vercel Blob, a cloud file store. Vercel functions have no
- *   permanent disk, so a file written there would vanish. Turned on by BLOB_READ_WRITE_TOKEN.
+ *   permanent disk, so a file written there would vanish. Turned on by BLOB_STORE_ID (newer
+ *   stores: Vercel signs requests for us via OIDC) or BLOB_READ_WRITE_TOKEN (older stores).
  * - Development: the local disk (.data/uploads), served by /uploads/[...path].
  */
-const useBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const useBlob = Boolean(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
 const BLOB_HOST = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
 
 const ROOT = path.join(process.cwd(), ".data", "uploads");

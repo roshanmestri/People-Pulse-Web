@@ -21,9 +21,9 @@ export function checkEnv() {
     : result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
 
   // On Vercel there is no permanent disk, so uploads must go to Vercel Blob.
-  if (process.env.VERCEL && !process.env.BLOB_READ_WRITE_TOKEN)
+  if (process.env.VERCEL && !process.env.BLOB_STORE_ID && !process.env.BLOB_READ_WRITE_TOKEN)
     problems.push(
-      "BLOB_READ_WRITE_TOKEN: required on Vercel (connect a Blob store to the project)",
+      "BLOB_STORE_ID / BLOB_READ_WRITE_TOKEN: required on Vercel (connect a public Blob store to the project)",
     );
 
   if (process.env.VERCEL && process.env.EMAIL_LOG_ONLY === "true")
