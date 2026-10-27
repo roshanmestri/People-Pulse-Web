@@ -6,6 +6,7 @@ import { nextCookies } from "better-auth/next-js";
 import { magicLink } from "better-auth/plugins";
 
 import { db } from "@/lib/db";
+import { isEmailEnabled, magicLinkEmail, sendEmail } from "@/lib/email";
 
 const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
@@ -45,15 +46,15 @@ export const auth = betterAuth({
     window: 60,
     max: 100,
     customRules: { "/sign-in/magic-link": { window: 60, max: 5 } },
+    // Count requests in Postgres (RateLimit table), not in memory: on Vercel each function
+    // instance has its own memory, so in-memory counts would reset and never add up.
+    storage: "database",
   },
   plugins: [
     magicLink({
       expiresIn: 60 * 15,
-      sendMagicLink: async ({ email, url }) => {
-        // M2: no email provider yet — print the link in the dev server terminal.
-        // TODO(email): send with Resend once an email provider is configured.
-        console.log(`\n✉️  Magic link for ${email}\n   ${url}\n`);
-      },
+      // Sent with Resend; in development without RESEND_API_KEY it's printed in the terminal.
+      sendMagicLink: async ({ email, url }) => sendEmail(magicLinkEmail(email, url)),
     }),
     // Lets Server Actions set auth cookies. Must be the last plugin.
     nextCookies(),
@@ -61,3 +62,5 @@ export const auth = betterAuth({
 });
 
 export const isGoogleEnabled = googleEnabled;
+/** Email sign-in needs a real email sender in production (development prints the link). */
+export const isMagicLinkEnabled = isEmailEnabled || process.env.NODE_ENV !== "production";

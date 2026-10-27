@@ -5,6 +5,8 @@
  * - Deletes previous seed users (emails ending in @seed.gathr.dev); cascades remove their
  *   activities, join requests, messages and notifications. Then recreates everything.
  * - Uses a seeded PRNG so the data is the same on every run (dates are relative to "now").
+ * - `npx prisma db seed -- --categories-only` only upserts the categories (for production,
+ *   where fake demo users and plans don't belong).
  *
  * This is a plain Node script, so it creates its own Prisma client instead of importing
  * src/lib/db.ts (which is `server-only` and only works inside Next.js).
@@ -1100,6 +1102,11 @@ async function seedActivities(
 }
 
 async function main() {
+  if (process.argv.includes("--categories-only")) {
+    const categoryIds = await seedCategories();
+    console.log(`Upserted ${categoryIds.size} categories (no demo data).`);
+    return;
+  }
   const removed = await db.user.deleteMany({
     where: { email: { endsWith: `@${SEED_EMAIL_DOMAIN}` } },
   });

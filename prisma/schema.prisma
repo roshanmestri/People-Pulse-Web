@@ -164,6 +164,15 @@ model Verification {
   @@index([identifier])
 }
 
+/// Better Auth rate-limit counters (rateLimit.storage = "database"). Shared by every server
+/// instance, unlike in-memory counts. `key` = client IP + path; `lastRequest` = ms timestamp.
+model RateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
 // ─── Categories & interests ─────────────────────────────────────────────────
 
 model Category {

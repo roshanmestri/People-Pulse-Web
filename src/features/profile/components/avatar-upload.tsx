@@ -6,7 +6,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { checkImageFile } from "@/lib/image-rules";
+import { prepareImage } from "@/lib/shrink-image";
 import { initials } from "@/lib/utils";
 
 import { uploadAvatar } from "../actions";
@@ -16,12 +16,12 @@ export function AvatarUpload({ name, image }: { name: string; image: string | nu
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  function upload(file: File | undefined) {
-    if (!file) return;
-    const problem = checkImageFile(file);
-    if (problem) return void toast.error(problem);
+  async function upload(picked: File | undefined) {
+    if (!picked) return;
+    const prepared = await prepareImage(picked);
+    if ("error" in prepared) return void toast.error(prepared.error);
     const fd = new FormData();
-    fd.set("photo", file);
+    fd.set("photo", prepared.file);
     startTransition(async () => {
       const result = await uploadAvatar(fd).catch(() => null);
       if (!result)

@@ -14,7 +14,9 @@ import { authClient } from "@/lib/auth-client";
 const schema = z.object({ email: z.email("Enter a valid email address") });
 type Values = z.infer<typeof schema>;
 
-export function SignInForm({ next, googleEnabled }: { next: string; googleEnabled: boolean }) {
+type Props = { next: string; googleEnabled: boolean; emailEnabled: boolean };
+
+export function SignInForm({ next, googleEnabled, emailEnabled }: Props) {
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { email: "" } });
@@ -74,47 +76,52 @@ export function SignInForm({ next, googleEnabled }: { next: string; googleEnable
           >
             Continue with Google
           </Button>
-          <div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground">
-            <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-          </div>
+          {emailEnabled ? (
+            <div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground">
+              <span className="h-px flex-1 bg-border" /> or{" "}
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          ) : null}
         </>
       ) : null}
 
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="email" className="font-bold">
-            Email
-          </Label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            className="h-12 rounded-xl"
-            aria-invalid={Boolean(form.formState.errors.email)}
-            aria-describedby={form.formState.errors.email ? "email-error" : undefined}
-            {...form.register("email")}
-          />
-          {form.formState.errors.email ? (
-            <p id="email-error" className="text-sm font-semibold text-destructive">
-              {form.formState.errors.email.message}
+      {emailEnabled ? (
+        <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="email" className="font-bold">
+              Email
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              className="h-12 rounded-xl"
+              aria-invalid={Boolean(form.formState.errors.email)}
+              aria-describedby={form.formState.errors.email ? "email-error" : undefined}
+              {...form.register("email")}
+            />
+            {form.formState.errors.email ? (
+              <p id="email-error" className="text-sm font-semibold text-destructive">
+                {form.formState.errors.email.message}
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="submit"
+            size="lg"
+            className="h-12 rounded-full text-base font-extrabold"
+            disabled={form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting ? "Sending…" : "Email me a sign-in link"}
+          </Button>
+          {error ? (
+            <p role="alert" className="text-sm font-semibold text-destructive">
+              {error}
             </p>
           ) : null}
-        </div>
-        <Button
-          type="submit"
-          size="lg"
-          className="h-12 rounded-full text-base font-extrabold"
-          disabled={form.formState.isSubmitting}
-        >
-          {form.formState.isSubmitting ? "Sending…" : "Email me a sign-in link"}
-        </Button>
-        {error ? (
-          <p role="alert" className="text-sm font-semibold text-destructive">
-            {error}
-          </p>
-        ) : null}
-      </form>
+        </form>
+      ) : null}
     </div>
   );
 }

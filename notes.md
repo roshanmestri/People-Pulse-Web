@@ -675,9 +675,88 @@ In production, the browser never sees the real error message, only a `digest` ID
 - **"Missing meta description" on plan pages is a false alarm.** Next 16 **streams metadata**: for normal browsers, `<title>`/`<meta>` arrive with the streamed page instead of making the whole response wait for the DB. Link-preview bots (WhatsApp, Slack, Facebook…) get it in `<head>` as usual, and Googlebot runs JS. Lighthouse 12's user agent counts as a normal browser, so it doesn't see it.
 - Scores are recorded in `README.md`.
 
+## 18. M9 — deploy (part A: getting the code ready)
+
+Big picture (with diagrams): `docs/shipping-gathr.pdf`. Choices: **Vercel** (app), **Neon** (Postgres + PostGIS), **Vercel Blob** (photos), **Resend** (email, optional).
+
+### What changes from laptop to cloud
+
+| Laptop                         | Production                     | Where in code                                              |
+| ------------------------------ | ------------------------------ | ---------------------------------------------------------- |
+| Docker Postgres                | Neon                           | nothing, just `DATABASE_URL`                               |
+| `.data/uploads` folder         | Vercel Blob                    | `src/lib/storage.ts` (switches on `BLOB_READ_WRITE_TOKEN`) |
+| Magic link printed in terminal | Email via Resend               | `src/lib/email.ts` (switches on `RESEND_API_KEY`)          |
+| `.env`                         | Vercel → Environment Variables | nothing                                                    |
+
+Each switch is "is the key set?", so local development works with no accounts at all.
+
+### Vercel Blob (`@vercel/blob`)
+
+**What:** a cloud folder for files. `put("covers/<uuid>.webp", data, { access: "public" })` returns a public `https://….public.blob.vercel-storage.com/…` URL, and `del(url)` removes the file.
+**Why:** Vercel functions have no permanent disk. A file written there disappears when that function instance stops.
+**Config:** `BLOB_READ_WRITE_TOKEN` (set automatically when you connect a Blob store to the Vercel project). `next.config.ts` → `images.remotePatterns` lets `next/image` optimise images from that host.
+
+### The 4.5 MB upload limit → shrink photos in the browser
+
+Vercel rejects request bodies over **4.5 MB**, and phone photos are often 5–12 MB. `src/lib/shrink-image.ts` (browser only) does the following:
+
+1. Draws a big photo onto a `<canvas>`, at most 2400 px wide.
+2. Exports it as a JPEG of about 1–2 MB.
+3. Uploads that smaller file. The server still re-checks it (max 4 MB) and re-encodes it with sharp.
+
+Tested with a 12 MB, 6000×4000 photo, which was stored as a 36 KB avatar. Bonus: much faster on mobile data.
+
+### Email with Resend (no SDK)
+
+`sendEmail()` is one `fetch` POST to `https://api.resend.com/emails` with `Authorization: Bearer RESEND_API_KEY`.
+
+- **Domain catch:** until you verify a domain you own, Resend's test sender `onboarding@resend.dev` can only deliver to **your own** Resend account email.
+- **No email configured in production?** The sign-in page hides the email form (`isMagicLinkEnabled`), and Google sign-in carries on.
+
+### `instrumentation.ts`: code that runs when the server starts
+
+`register()` runs once per server instance, before any request. Plain React has nothing like it, because there's no server.
+
+- We use it to validate env variables with Zod (`src/lib/env.ts`). A missing or short `BETTER_AUTH_SECRET`, or a missing Blob token on Vercel, stops the server with a clear list, instead of random 500s later.
+- Tested: `BETTER_AUTH_SECRET=short VERCEL=1 next start` printed both problems.
+- `env.ts` does **not** import `server-only`. That marker only works inside the React server bundle, and `instrumentation.ts` loads outside it.
+
+### Rate limiting must be shared
+
+Better Auth counted sign-in attempts **in memory**. On Vercel, many function instances run at once, each with its own memory, so "5 magic links per minute" would quietly become "5 per instance".
+
+- **Fix:** `rateLimit.storage: "database"` + a `RateLimit` table (migration `auth_rate_limit`). Better Auth expects `key` (unique), `count` and `lastRequest` (BigInt, ms).
+- **After the schema change, the running dev server's sign-in returned 500** (stale Prisma client, see M7 notes). Restarting `npm run dev` fixed it.
+
+### Neon: pooled vs direct connection
+
+- **Pooled** (`DATABASE_URL`, host contains `-pooler`): goes through PgBouncer, which shares a few real connections among many function instances. The app uses this.
+- **Direct** (`DATABASE_URL_UNPOOLED`): `prisma migrate` needs it, because it takes a session-level lock that poolers don't support. `prisma7.config.ts` prefers it when set. Neon's Vercel integration sets both.
+
+### Deploy-time database steps
+
+- `vercel.json` → `"buildCommand": "prisma migrate deploy && next build"`. Every deploy first applies new migrations (never generates or resets), then builds.
+- **Preview deployments run that build too.** Without Neon's integration (which gives each preview its own database branch), previews would migrate the production database.
+- Production seed: `npx prisma db seed -- --categories-only` gives you the 18 categories and no fake demo users.
+
+### CI: GitHub Actions (`.github/workflows/ci.yml`)
+
+**What:** on every push to `main` and every pull request, GitHub starts a fresh Ubuntu machine. It then:
+
+1. starts a throwaway PostGIS container (a `services:` entry, using the same image as `docker-compose.yml`)
+2. runs `npm ci`, migrations and the seed
+3. runs lint, type-check, unit tests, DB tests and the build
+4. runs the Playwright suite against `npm start` (production build), using the preinstalled Chrome
+
+A failing step marks the commit with a red ✗. The Playwright report is uploaded when tests fail.
+
+- Secrets in that file are fake, test-only values; real ones live only in Vercel.
+- Playwright config: `process.env.CI` switches to `npm start`, 1 retry, and never reuses a server.
+- **Rate-limit math:** a fresh CI run signs in 4 users in global setup, plus 1 in `auth.spec`. That's exactly 5 magic links, the per-minute limit.
+
 ---
 
-## 18. Progress log
+## 19. Progress log
 
 - [x] M0 Setup (2026-10-23)
 - [x] M1 Data layer (2026-10-23)
@@ -689,3 +768,10 @@ In production, the browser never sees the real error message, only a `digest` ID
 - [x] M7 Safety (2026-10-23)
 - [x] M8 Quality (2026-10-27)
 - [ ] M9 Deploy
+
+Postgres
+PostGIS
+prisma
+docker
+neon
+supabase

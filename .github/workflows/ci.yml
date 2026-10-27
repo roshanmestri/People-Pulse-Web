@@ -1,0 +1,67 @@
+# Runs on every push to main and every pull request. A red ✗ on the commit means
+# something below failed; click it on GitHub to see which step and why.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the run that's still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # A throwaway Postgres + PostGIS, same image as docker-compose.yml, just for this run.
+    services:
+      postgres:
+        image: imresamu/postgis:17-3.5
+        env:
+          POSTGRES_USER: gathr
+          POSTGRES_PASSWORD: gathr
+          POSTGRES_DB: gathr
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gathr -d gathr"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    # Test-only values. Real secrets live in Vercel, never in this file.
+    env:
+      DATABASE_URL: postgresql://gathr:gathr@localhost:5432/gathr?schema=public
+      BETTER_AUTH_SECRET: ci-only-secret-0000000000000000000000000000
+      BETTER_AUTH_URL: http://localhost:3000
+      SITE_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci # also runs `prisma generate` (postinstall)
+      - name: Database — migrate and seed
+        run: npx prisma migrate deploy && npm run db:seed
+
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm test
+      - run: npm run test:db
+      - run: npm run build
+
+      # Uses the Google Chrome that's preinstalled on GitHub's Ubuntu machines.
+      - name: Browser tests (Playwright + axe)
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/.report
+          retention-days: 7

@@ -4,26 +4,49 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { del, put } from "@vercel/blob";
+
 /**
- * Where uploaded files live. M3 uses the local disk (fine for development); at deploy
- * (M9) we swap in a cloud store (Cloudinary / UploadThing / Vercel Blob) behind the
- * same three functions, because hosts like Vercel have no permanent disk.
+ * Where uploaded files live, behind three functions so the rest of the app doesn't care:
+ * - Production (Vercel): Vercel Blob, a cloud file store. Vercel functions have no
+ *   permanent disk, so a file written there would vanish. Turned on by BLOB_READ_WRITE_TOKEN.
+ * - Development: the local disk (.data/uploads), served by /uploads/[...path].
  */
+const useBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const BLOB_HOST = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
+
 const ROOT = path.join(process.cwd(), ".data", "uploads");
 const FOLDERS = ["covers", "avatars"] as const;
 export type UploadFolder = (typeof FOLDERS)[number];
 
-/** Saves a WebP image and returns its public URL, e.g. "/uploads/covers/<id>.webp". */
+/**
+ * Saves a WebP image and returns its public URL: "https://….blob.vercel-storage.com/covers/<id>.webp"
+ * in production, "/uploads/covers/<id>.webp" locally.
+ */
 export async function saveImage(folder: UploadFolder, data: Buffer): Promise<string> {
   const name = `${randomUUID()}.webp`;
+  if (useBlob) {
+    const blob = await put(`${folder}/${name}`, data, {
+      access: "public",
+      contentType: "image/webp",
+      addRandomSuffix: false, // the name is already a random UUID
+      cacheControlMaxAge: 60 * 60 * 24 * 365, // never changes, so cache for a year
+    });
+    return blob.url;
+  }
   await mkdir(path.join(ROOT, folder), { recursive: true });
   await writeFile(path.join(ROOT, folder, name), data);
   return `/uploads/${folder}/${name}`;
 }
 
-/** Best-effort delete of a file we stored earlier (ignores URLs we don't own). */
+/** Best-effort delete of a file we stored earlier (ignores URLs we don't own, e.g. Google photos). */
 export async function deleteImage(url: string | null | undefined) {
-  const file = resolveUpload(url?.replace(/^\/uploads\//, "").split("/") ?? []);
+  if (!url) return;
+  if (BLOB_HOST.test(url)) {
+    if (useBlob) await del(url).catch(() => undefined);
+    return;
+  }
+  const file = resolveUpload(url.replace(/^\/uploads\//, "").split("/"));
   if (file) await unlink(file).catch(() => undefined);
 }
 

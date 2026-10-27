@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { categoryPhoto } from "@/lib/category-media";
-import { checkImageFile } from "@/lib/image-rules";
+import { prepareImage } from "@/lib/shrink-image";
 import type { LatLng } from "@/lib/geo";
 import { formatDay, formatDuration, formatTime, istToUtc } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -449,15 +449,17 @@ export function ActivityForm({ categories, defaultValues, fallbackCenter, host, 
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    const problem = file && checkImageFile(file);
-                    if (problem) {
-                      toast.error(problem);
-                      e.target.value = "";
+                  onChange={async (e) => {
+                    const input = e.target;
+                    const picked = input.files?.[0];
+                    if (!picked) return;
+                    const result = await prepareImage(picked);
+                    if ("error" in result) {
+                      toast.error(result.error);
+                      input.value = "";
                       return;
                     }
-                    setCover(file);
+                    setCover(result.file);
                     setCoverRemoved(false);
                   }}
                 />

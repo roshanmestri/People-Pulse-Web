@@ -5,7 +5,7 @@ import { Suspense } from "react";
 
 import { Logo } from "@/components/brand/logo";
 import { SignInForm } from "@/features/auth/components/sign-in-form";
-import { isGoogleEnabled } from "@/lib/auth";
+import { isGoogleEnabled, isMagicLinkEnabled } from "@/lib/auth";
 import { getSessionUser } from "@/lib/session";
 import { safeNextPath } from "@/lib/utils";
 
@@ -79,7 +79,7 @@ async function SignInGate({
           new one below. If your account was suspended, contact support.
         </p>
       ) : null}
-      <SignInForm next={next} googleEnabled={isGoogleEnabled} />
+      <SignInForm next={next} googleEnabled={isGoogleEnabled} emailEnabled={isMagicLinkEnabled} />
     </>
   );
 }
