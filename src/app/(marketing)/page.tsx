@@ -193,7 +193,7 @@ export default function LandingPage() {
           <span>© 2026 gathr</span>
           <span className="flex gap-5">
             <Link href="/#safety">Safety</Link>
-            <span>Privacy</span>
+            <Link href="/privacy">Privacy</Link>
             <span>Terms</span>
           </span>
         </div>
