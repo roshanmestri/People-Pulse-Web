@@ -19,6 +19,10 @@ export const metadata: Metadata = {
   title: { default: "Gathr — Find your people, nearby", template: "%s · Gathr" },
   description:
     "Football at 9, a trek at sunrise, a jam on Saturday. Find people nearby for offline activities and join in two taps.",
+  // The preview image itself comes from app/opengraph-image.tsx.
+  openGraph: { type: "website", siteName: "Gathr", locale: "en_IN" },
+  twitter: { card: "summary_large_image" },
+  appleWebApp: { title: "Gathr", statusBarStyle: "black-translucent" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

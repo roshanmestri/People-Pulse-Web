@@ -78,6 +78,10 @@ async function ExploreResults({
   ]);
   const query = filtersToQuery(filters);
   const widerRadius = RADII.find((r) => r > filters.r);
+  // Search text, category, day, level or "open only" set (radius and place don't count).
+  const narrowed = Boolean(
+    filters.q || filters.cat.length || filters.when !== "any" || filters.level || filters.open,
+  );
 
   return (
     <div className="relative z-10 mx-auto -mt-16 flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 sm:px-8">
@@ -114,7 +118,35 @@ async function ExploreResults({
         </Link>
       </div>
 
-      {total === 0 ? (
+      {total === 0 && !narrowed ? (
+        // Nothing at all nearby (a brand-new area): invite them to start it, not to "clear filters".
+        <div className="flex flex-col items-center gap-4 rounded-3xl bg-muted px-6 py-16 text-center">
+          <p className="text-2xl font-extrabold tracking-[-0.03em]">
+            Be the first near {center.label}
+          </p>
+          <p className="max-w-md text-muted-foreground">
+            Gathr is new here, so nobody&apos;s posted a plan within {filters.r} km yet. Host
+            something you&apos;d do anyway — Sunday football, a 6 am run, chai and a chat — and
+            share the link with your group.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link
+              href="/activities/new"
+              className="rounded-full bg-primary px-5 py-3 font-extrabold text-primary-foreground"
+            >
+              Host the first plan
+            </Link>
+            {widerRadius ? (
+              <Link
+                href={`/explore${filtersToQuery({ ...filters, r: widerRadius })}`}
+                className="rounded-full border bg-background px-5 py-3 font-bold"
+              >
+                Look within {widerRadius} km
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : total === 0 ? (
         <div className="flex flex-col items-center gap-4 rounded-3xl bg-muted px-6 py-16 text-center">
           <p className="text-xl font-extrabold">Nothing matches yet</p>
           <p className="max-w-md text-muted-foreground">

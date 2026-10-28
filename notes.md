@@ -764,6 +764,35 @@ A failing step marks the commit with a red ✗. The Playwright report is uploade
 - **Build-time vs runtime env:** parts of pages are prerendered during `next build`, so they see the env variables from **build** time. On Vercel, changing an env variable takes effect only after a **redeploy**.
 - **Reading CI results:** the repo's **Actions** tab, then the run, then the red step. Full logs need you signed in to GitHub.
 
+### Going live: what actually happened (M9, part B)
+
+- **Live at https://gathr-meetup.vercel.app.** `people-pulse-web.vercel.app` belonged to someone else, so we added our own name under Settings → Domains.
+- **Preview URLs are private.** URLs like `…-git-main-….vercel.app` and per-deploy URLs sit behind a Vercel login (Deployment Protection). Only the domain you add is public, and it's the only one Google and `BETTER_AUTH_URL` should point at.
+- **New Vercel Blob stores have no `BLOB_READ_WRITE_TOKEN`.** They set `BLOB_STORE_ID`, and the SDK logs in with Vercel's short-lived OIDC token. The store must be created **Public** (see the Vercel Blob section above).
+- **Integration-managed variables are locked.** `DATABASE_URL` from the Neon integration can't be edited in Vercel. After resetting the Neon password, the live site kept the old one and auth returned 500 (`prisma.rateLimit` failed first). Fix: disconnect the store from the project, connect it again, then redeploy.
+- **Never commit real secrets.** `.env.example` is public (names and blank values only); real values go in `.env` (gitignored) and in Vercel. A database URL contains the password, so if one is ever pasted somewhere, reset that password.
+- **Google OAuth:**
+  - Add the live origin and `…/api/auth/callback/google` to the OAuth client.
+  - "Publish app" needs a homepage and a privacy URL, which is why `/privacy` exists.
+  - Basic scopes (name, email, photo) work without Google's review. Brand verification only adds the name and logo to the consent screen, and needs a domain you own.
+
+### Link previews, app icon, share button (public launch polish)
+
+**What:** "metadata files": special filenames in `app/` that Next turns into `<head>` tags. Plain React has no equivalent; you'd hand-write `<meta>`/`<link>` tags or use a library.
+
+| File | Becomes |
+| --- | --- |
+| `app/opengraph-image.tsx` | site-wide `og:image`: the card WhatsApp/X/Slack show for a shared link |
+| `app/(app)/activities/[id]/opengraph-image.tsx` | per-plan card (photo, category, title, day/time, **area only**). It overrides the site one for that route. |
+| `app/icon.svg`, `app/favicon.ico`, `app/apple-icon.png` | tab icon and iPhone home-screen icon (generated from the logo's pin mark) |
+| `app/manifest.ts` | `/manifest.webmanifest`: name, icons, colours, `start_url` for "Add to Home Screen" |
+
+- `ImageResponse` (from `next/og`) renders JSX to a PNG. It only supports flexbox CSS and TTF/OTF fonts, so Plus Jakarta Sans lives in `src/assets/fonts/*.ttf` (SIL Open Font License). It also can't read WebP, so `src/lib/og.tsx` converts photos with sharp first.
+- **Size matters:** a photo card as PNG was 842 KB, and WhatsApp skips previews much over ~300 KB. `asJpeg()` re-encodes to JPEG, giving 63–82 KB.
+- The `og:image` URL is made absolute using `metadataBase` (from `SITE_URL`), so `SITE_URL` must be the live domain.
+- **Share button** (`features/activity/components/share-button.tsx`): uses the Web Share API (`navigator.share`). On phones it opens the system share sheet; elsewhere it copies the link. Its text is public, so it uses the area, never the venue.
+- **Honesty pass:** the hero badge now says "New · starting in…", and an empty Explore with no filters says "Be the first near X — host the first plan" instead of "Nothing matches yet". The new `/about` and `/terms` pages are linked from a shared `SiteFooter`.
+
 ---
 
 ## 19. Progress log

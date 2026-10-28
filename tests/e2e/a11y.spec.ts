@@ -28,7 +28,15 @@ async function scan(page: Page, url: string) {
 
 test.describe("accessibility", () => {
   test("public pages", async ({ page, plans }) => {
-    for (const url of ["/", "/explore", "/sign-in", `/activities/${plans.requestPlanId}`])
+    for (const url of [
+      "/",
+      "/explore",
+      "/sign-in",
+      "/about",
+      "/privacy",
+      "/terms",
+      `/activities/${plans.requestPlanId}`,
+    ])
       await scan(page, url);
   });
 

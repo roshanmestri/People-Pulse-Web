@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { VerifiedBadge } from "@/components/brand/verified-badge";
+import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 
 const TILES = [
@@ -58,7 +59,7 @@ export default function LandingPage() {
         <SiteHeader tone="overlay" />
         <div className="mx-auto flex w-full max-w-7xl flex-col justify-end gap-6 px-4 pt-28 pb-16 sm:px-8">
           <span className="self-start rounded-full border border-white/25 bg-white/15 px-3 py-1.5 text-[13px] font-bold text-white">
-            Live in Pune · Mumbai · Sangli
+            New · starting in Pune, Mumbai &amp; Sangli
           </span>
           <h1 className="max-w-4xl text-5xl leading-[0.95] font-extrabold tracking-[-0.055em] text-white sm:text-7xl md:text-[92px]">
             Find your people.
@@ -188,16 +189,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t bg-muted/60">
-        <div className="mx-auto flex max-w-7xl flex-wrap justify-between gap-4 px-4 py-7 text-sm text-muted-foreground sm:px-8">
-          <span>© 2026 gathr</span>
-          <span className="flex gap-5">
-            <Link href="/#safety">Safety</Link>
-            <Link href="/privacy">Privacy</Link>
-            <span>Terms</span>
-          </span>
-        </div>
-      </footer>
+      <SiteFooter />
     </>
   );
 }

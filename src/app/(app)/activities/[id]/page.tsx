@@ -1,4 +1,4 @@
-import { CalendarDays, Lock, MapPin, Share2, ShoppingBag, Wallet } from "lucide-react";
+import { CalendarDays, Lock, MapPin, ShoppingBag, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,6 +8,7 @@ import { Suspense } from "react";
 import { VerifiedBadge } from "@/components/brand/verified-badge";
 import { LazyPinMap } from "@/components/map/lazy-pin-map";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ShareButton } from "@/features/activity/components/share-button";
 import { getActivity, getViewerRequest, type ActivityDetail } from "@/features/activity/queries";
 import { JoinPanel, type ViewerState } from "@/features/join/components/join-panel";
 import { countPending } from "@/features/join/queries";
@@ -37,18 +38,21 @@ const STATUS: Record<string, string> = {
 const coverOf = (a: ActivityDetail) =>
   a.coverImage ?? categoryPhoto(a.category.slug) ?? "/images/hero-football.jpg";
 
-// SEO (BRD §6): server-rendered metadata + link-preview image. Area name only — never the venue.
+// SEO (BRD §6): server-rendered metadata. Area name only — never the venue. The preview
+// picture comes from ./opengraph-image.tsx.
 export async function generateMetadata({
   params,
 }: PageProps<"/activities/[id]">): Promise<Metadata> {
   const { id } = await params;
   const activity = await getActivity(id);
-  if (!activity || activity.status === "DRAFT") return { title: "Plan not found" };
+  if (!activity || activity.status === "DRAFT" || activity.hiddenAt)
+    return { title: "Plan not found" };
   const description = `${formatLongDay(activity.startsAt)}, ${formatTime(activity.startsAt)} · ${activity.areaName}. ${activity.description.slice(0, 120)}`;
   return {
     title: activity.title,
     description,
-    openGraph: { title: activity.title, description, images: [{ url: coverOf(activity) }] },
+    openGraph: { title: activity.title, description, type: "website", siteName: "Gathr" },
+    twitter: { card: "summary_large_image", title: activity.title, description },
   };
 }
 
@@ -307,10 +311,12 @@ async function ActivityContent({ params }: { params: PageProps<"/activities/[id]
             </span>
           </Link>
 
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Share2 className="size-4" aria-hidden="true" /> Share this page&apos;s link — previews
-            show the area, never the venue.
-          </p>
+          {activity.status !== "DRAFT" ? (
+            <ShareButton
+              title={activity.title}
+              text={`${activity.title} — ${formatLongDay(activity.startsAt)}, ${formatTime(activity.startsAt)} · ${activity.areaName}. Join me on Gathr 👇`}
+            />
+          ) : null}
           {viewer && !isHost ? (
             <ReportButton targetType="ACTIVITY" targetId={activity.id} what="this plan" />
           ) : null}
