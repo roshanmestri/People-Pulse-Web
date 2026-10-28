@@ -2,6 +2,8 @@
 
 Find people nearby for offline plans: football at 9, a trek at sunrise, a jam on Saturday. Hosts post a plan, people nearby join in two taps, and a group chat opens with the exact venue.
 
+**Live:** https://gathr-meetup.vercel.app
+
 Requirements: [`BRD.md`](BRD.md) · Learning notes (what each library or concept is and why): [`notes.md`](notes.md)
 
 ## Stack
@@ -86,7 +88,24 @@ CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
 - **Unit:** 69 tests covering validation schemas, the profanity filter, geo and venue-privacy rules, time, Explore filters and plan status.
 - **Database:** join capacity under concurrent requests (no overbooking).
 - **Browser:** 17 end-to-end flows (sign-in, explore, host, join, chat, report/block/admin).
-- **Accessibility:** axe scans of 12 key pages with zero serious or critical issues.
+- **Accessibility:** axe scans of 15 key pages with zero serious or critical issues.
+- **CI:** GitHub Actions runs lint, type-check, unit, database and browser tests on every push (`.github/workflows/ci.yml`).
+
+## Deployment
+
+| Piece                     | Service                    | Notes                                                                                                                  |
+| ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| App (pages + server code) | Vercel                     | Every push to `main` deploys. The build runs `prisma migrate deploy && next build` (`vercel.json`).                    |
+| Database                  | Neon (Postgres + PostGIS)  | Connected through the Vercel integration, which sets `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (migrations). |
+| Photos                    | Vercel Blob (public store) | Connected through the integration, which sets `BLOB_STORE_ID`. Login uses Vercel OIDC, so there's no long-lived token. |
+| Sign-in                   | Google OAuth               | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Redirect URI: `https://gathr-meetup.vercel.app/api/auth/callback/google`  |
+
+Also set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and `SITE_URL` (the live URL) in Vercel. `src/lib/env.ts` checks all of these at startup and names anything missing in the logs. One-off production tasks:
+
+```sh
+DATABASE_URL="<neon direct url>" npx tsx prisma/seed.ts --categories-only   # 18 categories, no demo data
+DATABASE_URL="<neon direct url>" npm run make-admin -- you@example.com
+```
 
 ## Privacy note
 

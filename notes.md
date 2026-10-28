@@ -806,7 +806,7 @@ A failing step marks the commit with a red ✗. The Playwright report is uploade
 - [x] M6 Chat & notifications (2026-10-23)
 - [x] M7 Safety (2026-10-23)
 - [x] M8 Quality (2026-10-27)
-- [ ] M9 Deploy
+- [x] M9 Deploy (2026-10-28) — live at https://gathr-meetup.vercel.app
 
 Postgres
 PostGIS
